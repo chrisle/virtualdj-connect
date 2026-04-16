@@ -50,12 +50,25 @@ export interface VirtualDjDbTrack {
 }
 
 /**
- * Payload emitted when a new track is detected
+ * Payload emitted when a new track is detected.
+ *
+ * Extra metadata fields (album, genre, key, bpm, duration, deck) are populated
+ * by the Network Control Plugin client when available. The M3U watcher only
+ * sets title/artist/filePath.
  */
 export type VirtualDjTrackPayload = {
   title: string;
   artist: string;
   remix?: string;
+  album?: string;
+  genre?: string;
+  key?: string;
+  /** Original BPM (unaffected by pitch), when known. */
+  bpm?: number;
+  /** Track length in seconds, when known. */
+  duration?: number;
+  /** Deck (1-4) the track is loaded on, when known. */
+  deck?: number;
   filePath?: string;
   fileLocation: string;
   isBeatportStream: boolean;

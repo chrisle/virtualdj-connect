@@ -99,7 +99,7 @@ describe('VirtualDjNetworkControl', () => {
     expect(control.running).toBe(false);
   });
 
-  it('emits a track for the audible deck on first poll', async () => {
+  it('emits a track for the audible deck on first poll with full metadata', async () => {
     const fetchFn = buildFetch({
       get_clock: '1',
       'deck 1 loaded': 'true',
@@ -107,6 +107,10 @@ describe('VirtualDjNetworkControl', () => {
       "deck 1 get_loaded_song 'title'": '"Strobe"',
       "deck 1 get_loaded_song 'artist'": '"deadmau5"',
       "deck 1 get_loaded_song 'album'": '"For Lack of a Better Name"',
+      "deck 1 get_loaded_song 'genre'": 'Progressive House',
+      "deck 1 get_loaded_song 'key'": 'Bm',
+      'deck 1 get_bpm absolute': '128.00',
+      'deck 1 get_time total': '10:33',
       'deck 1 get_path': '/Users/dj/Music/Strobe.mp3',
     });
 
@@ -122,10 +126,85 @@ describe('VirtualDjNetworkControl', () => {
     expect(track.mock.calls[0]![0]).toMatchObject({
       title: 'Strobe',
       artist: 'deadmau5',
+      album: 'For Lack of a Better Name',
+      genre: 'Progressive House',
+      key: 'Bm',
+      bpm: 128,
+      duration: 633,
+      deck: 1,
       filePath: '/Users/dj/Music/Strobe.mp3',
       fileLocation: '/Users/dj/Music/Strobe.mp3',
       isBeatportStream: false,
     });
+  });
+
+  it('tolerates missing optional fields without dropping the track', async () => {
+    // Simulate a VirtualDJ build where get_bpm and get_time total are not
+    // implemented — those queries return HTTP 500 from the mock server.
+    const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString());
+      const script = url.searchParams.get('script') ?? '';
+      const okResponses: Record<string, string> = {
+        get_clock: '1',
+        'deck 1 loaded': 'true',
+        'deck 1 is_audible': 'true',
+        "deck 1 get_loaded_song 'title'": 'Nightshift',
+        "deck 1 get_loaded_song 'artist'": 'Commodores',
+        "deck 1 get_loaded_song 'album'": '',
+        "deck 1 get_loaded_song 'genre'": '',
+        "deck 1 get_loaded_song 'key'": '',
+        'deck 1 get_path': '/Music/Nightshift.mp3',
+      };
+      if (script in okResponses) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => okResponses[script]!,
+        } as Response;
+      }
+      return { ok: false, status: 500, text: async () => '' } as Response;
+    }) as unknown as typeof fetch;
+
+    control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
+    const track = vi.fn();
+    control.on('track', track);
+
+    await control.start();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track.mock.calls[0]![0]).toMatchObject({
+      title: 'Nightshift',
+      artist: 'Commodores',
+      deck: 1,
+    });
+    expect(track.mock.calls[0]![0].bpm).toBeUndefined();
+    expect(track.mock.calls[0]![0].duration).toBeUndefined();
+  });
+
+  it('parses duration as raw seconds when VirtualDJ returns a number', async () => {
+    const fetchFn = buildFetch({
+      get_clock: '1',
+      'deck 1 loaded': 'true',
+      'deck 1 is_audible': 'true',
+      "deck 1 get_loaded_song 'title'": 'x',
+      "deck 1 get_loaded_song 'artist'": 'y',
+      "deck 1 get_loaded_song 'album'": '',
+      "deck 1 get_loaded_song 'genre'": '',
+      "deck 1 get_loaded_song 'key'": '',
+      'deck 1 get_bpm absolute': '',
+      'deck 1 get_time total': '243.5',
+      'deck 1 get_path': '/m.mp3',
+    });
+
+    control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
+    const track = vi.fn();
+    control.on('track', track);
+
+    await control.start();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(track.mock.calls[0]![0].duration).toBe(243.5);
   });
 
   it('does not emit a duplicate track while the audible song is unchanged', async () => {
@@ -136,6 +215,10 @@ describe('VirtualDjNetworkControl', () => {
       "deck 1 get_loaded_song 'title'": 'Strobe',
       "deck 1 get_loaded_song 'artist'": 'deadmau5',
       "deck 1 get_loaded_song 'album'": '',
+      "deck 1 get_loaded_song 'genre'": '',
+      "deck 1 get_loaded_song 'key'": '',
+      'deck 1 get_bpm absolute': '',
+      'deck 1 get_time total': '',
       'deck 1 get_path': '/Users/dj/Music/Strobe.mp3',
     });
 
@@ -159,6 +242,10 @@ describe('VirtualDjNetworkControl', () => {
       "deck 1 get_loaded_song 'title'": 'Phuture',
       "deck 1 get_loaded_song 'artist'": 'Your Mind',
       "deck 1 get_loaded_song 'album'": '',
+      "deck 1 get_loaded_song 'genre'": '',
+      "deck 1 get_loaded_song 'key'": '',
+      'deck 1 get_bpm absolute': '',
+      'deck 1 get_time total': '',
       'deck 1 get_path': 'netsearch://bp12345',
     });
 
