@@ -45,6 +45,10 @@ type DeckSnapshot = {
   title: string;
   artist: string;
   album: string;
+  genre: string;
+  key: string;
+  bpm?: number;
+  duration?: number;
   path: string;
 };
 
@@ -205,7 +209,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
   private async readDeck(deck: number): Promise<DeckSnapshot | null> {
     const prefix = `deck ${deck} `;
     try {
-      // Check if a song is loaded first to avoid querying six fields for empty decks.
+      // Check if a song is loaded first to avoid querying many fields on empty decks.
       const loaded = parseBool(await this.query(`${prefix}loaded`));
       if (!loaded) {
         return {
@@ -215,15 +219,35 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
           title: '',
           artist: '',
           album: '',
+          genre: '',
+          key: '',
           path: '',
         };
       }
 
-      const [audibleRaw, title, artist, album, path] = await Promise.all([
+      // Some VirtualDJ builds don't implement every VDJScript verb; swallow
+      // per-field errors so one bad field doesn't void the whole deck read.
+      const safe = (s: string) => this.query(s).catch(() => '');
+
+      const [
+        audibleRaw,
+        title,
+        artist,
+        album,
+        genre,
+        keyStr,
+        bpmRaw,
+        durationRaw,
+        path,
+      ] = await Promise.all([
         this.query(`${prefix}is_audible`),
         this.query(`${prefix}get_loaded_song 'title'`),
         this.query(`${prefix}get_loaded_song 'artist'`),
-        this.query(`${prefix}get_loaded_song 'album'`),
+        safe(`${prefix}get_loaded_song 'album'`),
+        safe(`${prefix}get_loaded_song 'genre'`),
+        safe(`${prefix}get_loaded_song 'key'`),
+        safe(`${prefix}get_bpm absolute`),
+        safe(`${prefix}get_time total`),
         this.query(`${prefix}get_path`),
       ]);
 
@@ -234,6 +258,10 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
         title: stripQuotes(title),
         artist: stripQuotes(artist),
         album: stripQuotes(album),
+        genre: stripQuotes(genre),
+        key: stripQuotes(keyStr),
+        bpm: parseBpm(bpmRaw),
+        duration: parseDuration(durationRaw),
         path: stripQuotes(path),
       };
     } catch (err) {
@@ -254,6 +282,12 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
     return {
       title: snapshot.title || 'Unknown Title',
       artist: snapshot.artist || 'Unknown Artist',
+      album: snapshot.album || undefined,
+      genre: snapshot.genre || undefined,
+      key: snapshot.key || undefined,
+      bpm: snapshot.bpm,
+      duration: snapshot.duration,
+      deck: snapshot.deck,
       filePath,
       fileLocation,
       isBeatportStream,
@@ -275,6 +309,37 @@ export function pickOnAirDeck(snapshots: DeckSnapshot[]): DeckSnapshot | null {
 
 function parseBool(raw: string): boolean {
   return /^true$/i.test(raw.trim());
+}
+
+/**
+ * Parse a BPM response. VDJScript returns BPM as a float string like "128.00".
+ * Returns undefined for empty or unparseable responses.
+ */
+function parseBpm(raw: string): number | undefined {
+  const trimmed = stripQuotes(raw);
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/**
+ * Parse a track-length response. VDJScript's `get_time total` may return either
+ * a number of seconds ("243.5") or a formatted time ("4:03" or "01:04:03").
+ */
+function parseDuration(raw: string): number | undefined {
+  const trimmed = stripQuotes(raw);
+  if (!trimmed) return undefined;
+
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const n = Number(trimmed);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  }
+
+  const parts = trimmed.split(':').map((p) => Number(p));
+  if (parts.some((p) => !Number.isFinite(p))) return undefined;
+  if (parts.length === 2) return parts[0]! * 60 + parts[1]!;
+  if (parts.length === 3) return parts[0]! * 3600 + parts[1]! * 60 + parts[2]!;
+  return undefined;
 }
 
 /**
