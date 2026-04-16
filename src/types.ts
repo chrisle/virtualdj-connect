@@ -69,6 +69,8 @@ export type VirtualDjTrackPayload = {
   duration?: number;
   /** Deck (1-4) the track is loaded on, when known. */
   deck?: number;
+  /** True when VirtualDJ reported this deck as audible (`is_audible`). */
+  isOnAir?: boolean;
   filePath?: string;
   fileLocation: string;
   isBeatportStream: boolean;
