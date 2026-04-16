@@ -132,6 +132,7 @@ describe('VirtualDjNetworkControl', () => {
       bpm: 128,
       duration: 633,
       deck: 1,
+      isOnAir: true,
       filePath: '/Users/dj/Music/Strobe.mp3',
       fileLocation: '/Users/dj/Music/Strobe.mp3',
       isBeatportStream: false,

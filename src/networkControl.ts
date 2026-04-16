@@ -288,6 +288,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
       bpm: snapshot.bpm,
       duration: snapshot.duration,
       deck: snapshot.deck,
+      isOnAir: snapshot.audible,
       filePath,
       fileLocation,
       isBeatportStream,
