@@ -111,7 +111,7 @@ describe('VirtualDjNetworkControl', () => {
       "deck 1 get_loaded_song 'key'": 'Bm',
       'deck 1 get_bpm absolute': '128.00',
       'deck 1 get_time total': '10:33',
-      'deck 1 get_path': '/Users/dj/Music/Strobe.mp3',
+      'deck 1 get_filepath': '/Users/dj/Music/Strobe.mp3',
     });
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
@@ -154,7 +154,7 @@ describe('VirtualDjNetworkControl', () => {
         "deck 1 get_loaded_song 'album'": '',
         "deck 1 get_loaded_song 'genre'": '',
         "deck 1 get_loaded_song 'key'": '',
-        'deck 1 get_path': '/Music/Nightshift.mp3',
+        'deck 1 get_filepath': '/Music/Nightshift.mp3',
       };
       if (script in okResponses) {
         return {
@@ -195,7 +195,7 @@ describe('VirtualDjNetworkControl', () => {
       "deck 1 get_loaded_song 'key'": '',
       'deck 1 get_bpm absolute': '',
       'deck 1 get_time total': '243.5',
-      'deck 1 get_path': '/m.mp3',
+      'deck 1 get_filepath': '/m.mp3',
     });
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
@@ -220,7 +220,7 @@ describe('VirtualDjNetworkControl', () => {
       "deck 1 get_loaded_song 'key'": '',
       'deck 1 get_bpm absolute': '',
       'deck 1 get_time total': '',
-      'deck 1 get_path': '/Users/dj/Music/Strobe.mp3',
+      'deck 1 get_filepath': '/Users/dj/Music/Strobe.mp3',
     });
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1], pollIntervalMs: 1000 });
@@ -235,6 +235,70 @@ describe('VirtualDjNetworkControl', () => {
     expect(track).toHaveBeenCalledTimes(1);
   });
 
+  it('treats VDJScript "error:-N" responses as empty fields', async () => {
+    // The Network Control Plugin returns "error:-2147467259" (E_FAIL) for
+    // unrecognized verbs. Passing that string downstream as a file path
+    // breaks artwork extraction, so it must be coerced to empty.
+    const fetchFn = buildFetch({
+      get_clock: '1',
+      'deck 1 loaded': 'yes',
+      'deck 1 is_audible': 'yes',
+      "deck 1 get_loaded_song 'title'": '"Opus"',
+      "deck 1 get_loaded_song 'artist'": '"Eric Prydz"',
+      "deck 1 get_loaded_song 'album'": '',
+      "deck 1 get_loaded_song 'genre'": '',
+      "deck 1 get_loaded_song 'key'": '',
+      'deck 1 get_bpm absolute': '',
+      'deck 1 get_time total': '',
+      'deck 1 get_filepath': 'error:-2147467259',
+    });
+
+    control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
+    const track = vi.fn();
+    control.on('track', track);
+
+    await control.start();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track.mock.calls[0]![0].filePath).toBeUndefined();
+    expect(track.mock.calls[0]![0].fileLocation).toBe('');
+  });
+
+  it('parses VirtualDJ\'s "yes"/"no" boolean responses', async () => {
+    // Real VirtualDJ returns "yes"/"no" for `loaded` and `is_audible`, not
+    // "true"/"false". Earlier revisions of parseBool only matched "true",
+    // which made the poller think no decks were ever loaded.
+    const fetchFn = buildFetch({
+      get_clock: '1',
+      'deck 1 loaded': 'yes',
+      'deck 1 is_audible': 'yes',
+      "deck 1 get_loaded_song 'title'": '"Strobe"',
+      "deck 1 get_loaded_song 'artist'": '"deadmau5"',
+      "deck 1 get_loaded_song 'album'": '',
+      "deck 1 get_loaded_song 'genre'": '',
+      "deck 1 get_loaded_song 'key'": '',
+      'deck 1 get_bpm absolute': '',
+      'deck 1 get_time total': '',
+      'deck 1 get_filepath': '/Music/Strobe.mp3',
+    });
+
+    control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
+    const track = vi.fn();
+    control.on('track', track);
+
+    await control.start();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track.mock.calls[0]![0]).toMatchObject({
+      title: 'Strobe',
+      artist: 'deadmau5',
+      isOnAir: true,
+      deck: 1,
+    });
+  });
+
   it('detects Beatport streaming URLs and omits filePath', async () => {
     const fetchFn = buildFetch({
       get_clock: '1',
@@ -247,7 +311,7 @@ describe('VirtualDjNetworkControl', () => {
       "deck 1 get_loaded_song 'key'": '',
       'deck 1 get_bpm absolute': '',
       'deck 1 get_time total': '',
-      'deck 1 get_path': 'netsearch://bp12345',
+      'deck 1 get_filepath': 'netsearch://bp12345',
     });
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });

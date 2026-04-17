@@ -248,7 +248,9 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
         safe(`${prefix}get_loaded_song 'key'`),
         safe(`${prefix}get_bpm absolute`),
         safe(`${prefix}get_time total`),
-        this.query(`${prefix}get_path`),
+        // `get_filepath` is the correct verb per VDJScript v8 docs.
+        // `get_path` returns "error:-2147467259" (E_FAIL / unknown verb).
+        safe(`${prefix}get_filepath`),
       ]);
 
       return {
@@ -309,7 +311,9 @@ export function pickOnAirDeck(snapshots: DeckSnapshot[]): DeckSnapshot | null {
 }
 
 function parseBool(raw: string): boolean {
-  return /^true$/i.test(raw.trim());
+  // VirtualDJ returns different truthy strings depending on the verb:
+  // `loaded` → "yes"/"no", `is_audible` → "yes"/"no", others → "true"/"false" or "1"/"0".
+  return /^(true|yes|on|1)$/i.test(raw.trim());
 }
 
 /**
@@ -346,9 +350,15 @@ function parseDuration(raw: string): number | undefined {
 /**
  * VDJScript query responses sometimes come back wrapped in single or double
  * quotes. Strip exactly one matching pair.
+ *
+ * Also filters out VDJ error responses like "error:-2147467259" which the
+ * plugin returns when a verb is invalid or the script engine throws. These
+ * would otherwise poison downstream code (e.g. pass a bogus "path" to the
+ * file metadata extractor).
  */
 function stripQuotes(raw: string): string {
   const trimmed = raw.trim();
+  if (/^error:-?\d+$/i.test(trimmed)) return '';
   if (trimmed.length >= 2) {
     const first = trimmed[0];
     const last = trimmed[trimmed.length - 1];
