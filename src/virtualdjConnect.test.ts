@@ -37,6 +37,11 @@ describe('VirtualDjConnect', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // mockReset clears the queued mockReturnValueOnce values so a failed
+    // test cannot leak unconsumed values into the next test.
+    mocks.mockM3uParser.getLatestTrack.mockReset();
+    mocks.mockM3uParser.checkWriteHistory.mockReset();
+    mocks.mockM3uParser.checkWriteHistory.mockReturnValue(true);
     vi.useFakeTimers();
     mocks.mockM3uParser.basePath =
       '/Users/testuser/Library/Application Support/VirtualDJ';
@@ -106,13 +111,15 @@ describe('VirtualDjConnect', () => {
 
       connect.start();
 
-      expect(trackHandler).toHaveBeenCalledWith({
-        track: expect.objectContaining({
-          id: 'abc123',
+      expect(trackHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
           title: 'Test',
           artist: 'Artist',
-        }),
-      });
+          fileLocation: '/path/to/track.mp3',
+          filePath: '/path/to/track.mp3',
+          isBeatportStream: false,
+        })
+      );
     });
   });
 
@@ -149,15 +156,15 @@ describe('VirtualDjConnect', () => {
       connect.start();
 
       // Initial track emitted on start
-      expect(trackHandler).toHaveBeenCalledWith({
-        track: expect.objectContaining({ id: 'track1' }),
-      });
+      expect(trackHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'First', artist: 'Artist1' })
+      );
 
       vi.advanceTimersByTime(5000);
 
-      expect(trackHandler).toHaveBeenCalledWith({
-        track: expect.objectContaining({ id: 'track2' }),
-      });
+      expect(trackHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Second', artist: 'Artist2' })
+      );
     });
 
     it('does not emit if track ID is the same', () => {
