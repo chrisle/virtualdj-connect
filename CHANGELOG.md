@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.1
+
+- ci: virtualdj-connect releases actually reach npm instead of being tagged and dropped
+
+
 ## v1.2.0
 
 - feat: on-air changes are reported live instead of being frozen when the track was detected

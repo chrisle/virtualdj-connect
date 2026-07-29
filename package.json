@@ -1,6 +1,6 @@
 {
   "name": "virtualdj-connect",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Real-time VirtualDJ track metadata for Node — M3U history watcher plus a Network Control client with per-deck data, on-air detection, and sandbox awareness",
   "license": "MIT",
   "repository": {
