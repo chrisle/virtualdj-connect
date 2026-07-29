@@ -5,10 +5,13 @@ import { VirtualDjNetworkControl, pickOnAirDeck } from './networkControl.js';
  * Build a mock fetch that returns canned responses based on the `script=`
  * query parameter. Each query is matched exactly.
  */
-function buildFetch(map: Record<string, string>, overrides?: {
-  notOk?: boolean;
-  status?: number;
-}): typeof fetch {
+function buildFetch(
+  map: Record<string, string>,
+  overrides?: {
+    notOk?: boolean;
+    status?: number;
+  },
+): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(typeof input === 'string' ? input : input.toString());
     const script = url.searchParams.get('script') ?? '';
@@ -38,23 +41,63 @@ function buildFetch(map: Record<string, string>, overrides?: {
 describe('pickOnAirDeck', () => {
   it('prefers an audible loaded deck', () => {
     const picked = pickOnAirDeck([
-      { deck: 1, loaded: true, audible: false, title: 'A', artist: '', album: '', path: '' },
-      { deck: 2, loaded: true, audible: true, title: 'B', artist: '', album: '', path: '' },
+      {
+        deck: 1,
+        loaded: true,
+        audible: false,
+        title: 'A',
+        artist: '',
+        album: '',
+        path: '',
+      },
+      {
+        deck: 2,
+        loaded: true,
+        audible: true,
+        title: 'B',
+        artist: '',
+        album: '',
+        path: '',
+      },
     ]);
     expect(picked?.deck).toBe(2);
   });
 
   it('falls back to any loaded deck when none are audible', () => {
     const picked = pickOnAirDeck([
-      { deck: 1, loaded: false, audible: false, title: '', artist: '', album: '', path: '' },
-      { deck: 2, loaded: true, audible: false, title: 'B', artist: '', album: '', path: '' },
+      {
+        deck: 1,
+        loaded: false,
+        audible: false,
+        title: '',
+        artist: '',
+        album: '',
+        path: '',
+      },
+      {
+        deck: 2,
+        loaded: true,
+        audible: false,
+        title: 'B',
+        artist: '',
+        album: '',
+        path: '',
+      },
     ]);
     expect(picked?.deck).toBe(2);
   });
 
   it('returns null when no deck is loaded', () => {
     const picked = pickOnAirDeck([
-      { deck: 1, loaded: false, audible: false, title: '', artist: '', album: '', path: '' },
+      {
+        deck: 1,
+        loaded: false,
+        audible: false,
+        title: '',
+        artist: '',
+        album: '',
+        path: '',
+      },
     ]);
     expect(picked).toBeNull();
   });
@@ -84,7 +127,10 @@ describe('VirtualDjNetworkControl', () => {
   });
 
   it('emits error and stays stopped when handshake fails', async () => {
-    const fetchFn = buildFetch({ get_clock: 'unauthorized' }, { notOk: true, status: 401 });
+    const fetchFn = buildFetch(
+      { get_clock: 'unauthorized' },
+      { notOk: true, status: 401 },
+    );
     control = new VirtualDjNetworkControl({ fetchFn, decks: [] });
     const ready = vi.fn();
     const error = vi.fn();
@@ -223,7 +269,11 @@ describe('VirtualDjNetworkControl', () => {
       'deck 1 get_filepath': '/Users/dj/Music/Strobe.mp3',
     });
 
-    control = new VirtualDjNetworkControl({ fetchFn, decks: [1], pollIntervalMs: 1000 });
+    control = new VirtualDjNetworkControl({
+      fetchFn,
+      decks: [1],
+      pollIntervalMs: 1000,
+    });
     const track = vi.fn();
     control.on('track', track);
 
@@ -326,6 +376,204 @@ describe('VirtualDjNetworkControl', () => {
       beatportId: 12345,
       filePath: undefined,
       fileLocation: 'netsearch://bp12345',
+    });
+  });
+
+  describe('sandbox mode', () => {
+    /**
+     * Deck responses for a normal on-air read, so each sandbox test only has to
+     * vary the `sandbox` answer.
+     */
+    const deckResponses: Record<string, string> = {
+      get_clock: '1',
+      'deck 1 loaded': 'yes',
+      'deck 1 is_audible': 'yes',
+      "deck 1 get_loaded_song 'title'": 'Strobe',
+      "deck 1 get_loaded_song 'artist'": 'deadmau5',
+      "deck 1 get_loaded_song 'album'": '',
+      "deck 1 get_loaded_song 'genre'": '',
+      "deck 1 get_loaded_song 'key'": '',
+      'deck 1 get_bpm absolute': '',
+      'deck 1 get_time total': '',
+      'deck 1 get_filepath': '/Music/Strobe.mp3',
+    };
+
+    it('emits no track and skips deck queries while sandbox is engaged', async () => {
+      // In sandbox the rehearsal deck still answers `is_audible: yes` even
+      // though it is routed to headphones only — publishing it would show the
+      // audience a track they cannot hear.
+      const fetchFn = buildFetch({ ...deckResponses, sandbox: 'yes' });
+      control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
+      const track = vi.fn();
+      const sandbox = vi.fn();
+      control.on('track', track);
+      control.on('sandbox', sandbox);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(track).not.toHaveBeenCalled();
+      expect(sandbox).toHaveBeenCalledExactlyOnceWith(true);
+      expect(control.sandboxed).toBe(true);
+
+      // Handshake + sandbox only — no `deck ...` query was ever issued, so the
+      // short-circuit really did skip the per-deck reads rather than filter
+      // their results afterwards.
+      const scripts = (
+        fetchFn as unknown as ReturnType<typeof vi.fn>
+      ).mock.calls.map((call) =>
+        new URL(String(call[0])).searchParams.get('script'),
+      );
+      expect(new Set(scripts)).toEqual(new Set(['get_clock', 'sandbox']));
+    });
+
+    it('announces sandbox state changes only on transitions', async () => {
+      let sandboxState = 'yes';
+      const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(
+          typeof input === 'string' ? input : input.toString(),
+        );
+        const script = url.searchParams.get('script') ?? '';
+        const body =
+          script === 'sandbox' ? sandboxState : deckResponses[script];
+        if (body === undefined)
+          return { ok: false, status: 500, text: async () => '' } as Response;
+        return { ok: true, status: 200, text: async () => body } as Response;
+      }) as unknown as typeof fetch;
+
+      control = new VirtualDjNetworkControl({
+        fetchFn,
+        decks: [1],
+        pollIntervalMs: 1000,
+      });
+      const sandbox = vi.fn();
+      const track = vi.fn();
+      control.on('sandbox', sandbox);
+      control.on('track', track);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(1100);
+
+      // Two polls inside sandbox, one announcement.
+      expect(sandbox).toHaveBeenCalledExactlyOnceWith(true);
+
+      sandboxState = 'no';
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(sandbox).toHaveBeenCalledTimes(2);
+      expect(sandbox).toHaveBeenLastCalledWith(false);
+      expect(control.sandboxed).toBe(false);
+      expect(track).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds the on-air track across a sandbox session without re-emitting', async () => {
+      let sandboxState = 'no';
+      const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(
+          typeof input === 'string' ? input : input.toString(),
+        );
+        const script = url.searchParams.get('script') ?? '';
+        const body =
+          script === 'sandbox' ? sandboxState : deckResponses[script];
+        if (body === undefined)
+          return { ok: false, status: 500, text: async () => '' } as Response;
+        return { ok: true, status: 200, text: async () => body } as Response;
+      }) as unknown as typeof fetch;
+
+      control = new VirtualDjNetworkControl({
+        fetchFn,
+        decks: [1],
+        pollIntervalMs: 1000,
+      });
+      const track = vi.fn();
+      control.on('track', track);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+      expect(track).toHaveBeenCalledTimes(1);
+
+      // Sandbox comes and goes while the same song stays on the master.
+      sandboxState = 'yes';
+      await vi.advanceTimersByTimeAsync(1100);
+      sandboxState = 'no';
+      await vi.advanceTimersByTimeAsync(1100);
+
+      // Still one emission — the deduplication signature survived the bail-out.
+      expect(track).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops querying sandbox on builds that reject the verb', async () => {
+      // Unknown verbs answer "error:-2147467259" (E_FAIL) with HTTP 200. That
+      // must not be read as truthy, and must not be re-asked every second.
+      const fetchFn = buildFetch({
+        ...deckResponses,
+        sandbox: 'error:-2147467259',
+      });
+      control = new VirtualDjNetworkControl({
+        fetchFn,
+        decks: [1],
+        pollIntervalMs: 1000,
+      });
+      const track = vi.fn();
+      control.on('track', track);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(control.sandboxed).toBe(false);
+      expect(track).toHaveBeenCalledTimes(1);
+
+      const sandboxQueries = (
+        fetchFn as unknown as ReturnType<typeof vi.fn>
+      ).mock.calls.filter(
+        (call) =>
+          new URL(String(call[0])).searchParams.get('script') === 'sandbox',
+      );
+      expect(sandboxQueries).toHaveLength(1);
+    });
+
+    it('keeps polling decks when the sandbox query fails at the transport level', async () => {
+      // A transient failure is not evidence of sandbox, and unlike an `error:-N`
+      // response it must not disable detection permanently.
+      let sandboxReachable = false;
+      const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(
+          typeof input === 'string' ? input : input.toString(),
+        );
+        const script = url.searchParams.get('script') ?? '';
+        if (script === 'sandbox') {
+          if (!sandboxReachable) throw new Error('ECONNRESET');
+          return { ok: true, status: 200, text: async () => 'yes' } as Response;
+        }
+        const body = deckResponses[script];
+        if (body === undefined)
+          return { ok: false, status: 500, text: async () => '' } as Response;
+        return { ok: true, status: 200, text: async () => body } as Response;
+      }) as unknown as typeof fetch;
+
+      control = new VirtualDjNetworkControl({
+        fetchFn,
+        decks: [1],
+        pollIntervalMs: 1000,
+      });
+      const track = vi.fn();
+      const sandbox = vi.fn();
+      control.on('track', track);
+      control.on('sandbox', sandbox);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(track).toHaveBeenCalledTimes(1);
+      expect(sandbox).not.toHaveBeenCalled();
+
+      // Detection recovers once the query succeeds again.
+      sandboxReachable = true;
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(sandbox).toHaveBeenCalledExactlyOnceWith(true);
     });
   });
 

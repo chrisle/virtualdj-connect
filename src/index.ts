@@ -21,10 +21,7 @@ export {
 export { VirtualDjM3uParser } from './m3uParser.js';
 
 // Network Control Plugin client
-export {
-  VirtualDjNetworkControl,
-  pickOnAirDeck,
-} from './networkControl.js';
+export { VirtualDjNetworkControl, pickOnAirDeck } from './networkControl.js';
 export type { VirtualDjNetworkControlOptions } from './networkControl.js';
 
 // Logger
@@ -35,6 +32,7 @@ export { noopLogger } from './types/logger.js';
 export type {
   VirtualDjConnectOptions,
   VirtualDjConnectEvents,
+  VirtualDjNetworkControlEvents,
   VirtualDjTrack,
   VirtualDjDbTrack,
   VirtualDjTrackPayload,

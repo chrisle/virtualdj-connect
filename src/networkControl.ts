@@ -9,7 +9,7 @@
 import EventEmitter from 'node:events';
 import { type Logger, noopLogger } from './types/logger.js';
 import type {
-  TypedEmitter,
+  NetworkControlTypedEmitter,
   VirtualDjTrackPayload,
 } from './types.js';
 
@@ -17,6 +17,20 @@ const DEFAULT_POLL_INTERVAL_MS = 1000;
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8080;
 const DEFAULT_DECKS = [1, 2, 3, 4] as const;
+
+/**
+ * VDJScript query that reports whether Sandbox mode is engaged.
+ *
+ * Sandbox is a rehearsal mode: VirtualDJ pulls the active deck into a private
+ * area routed to the headphone output while the master keeps playing whatever
+ * was on air when it was engaged. Crucially, `is_audible` still answers "yes"
+ * for the rehearsal deck — it only reflects mixer routing and knows nothing
+ * about the detoured master bus — so deck polling during sandbox would publish
+ * a track the audience never heard and overwrite the real on-air one.
+ *
+ * Reported by @m1ng.
+ */
+const SANDBOX_QUERY = 'sandbox';
 
 /**
  * Options for VirtualDjNetworkControl.
@@ -55,7 +69,10 @@ type DeckSnapshot = {
 /**
  * Detect Beatport streaming URLs the same way the M3U parser does.
  */
-function detectBeatport(fileLocation: string): { isBeatportStream: boolean; beatportId?: number } {
+function detectBeatport(fileLocation: string): {
+  isBeatportStream: boolean;
+  beatportId?: number;
+} {
   const match = /netsearch:\/\/bp(\d+)/.exec(fileLocation);
   if (!match) return { isBeatportStream: false };
   return { isBeatportStream: true, beatportId: parseInt(match[1]!, 10) };
@@ -66,7 +83,7 @@ function detectBeatport(fileLocation: string): { isBeatportStream: boolean; beat
  * over HTTP and emits track-change events compatible with
  * VirtualDjConnect's event surface.
  */
-export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmitter) {
+export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkControlTypedEmitter) {
   private host: string;
   private port: number;
   private bearer: string | undefined;
@@ -78,6 +95,8 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private isRunning = false;
   private lastSignature = '';
+  private sandboxActive = false;
+  private sandboxQuerySupported = true;
 
   constructor(options: VirtualDjNetworkControlOptions = {}) {
     super();
@@ -102,6 +121,11 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
     return this.pollIntervalMs;
   }
 
+  /** True while VirtualDJ's Sandbox mode is engaged and polling is suspended. */
+  get sandboxed(): boolean {
+    return this.sandboxActive;
+  }
+
   /**
    * Start polling the plugin. Emits `ready` once the first handshake succeeds,
    * `track` on each new audible track, and `error` on reachability failures.
@@ -115,7 +139,10 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
     } catch (err) {
       this.isRunning = false;
       const e = err instanceof Error ? err : new Error(String(err));
-      this.emit('error', new Error(`Network Control handshake failed: ${e.message}`));
+      this.emit(
+        'error',
+        new Error(`Network Control handshake failed: ${e.message}`),
+      );
       return;
     }
 
@@ -139,6 +166,8 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
     }
     this.isRunning = false;
     this.lastSignature = '';
+    this.sandboxActive = false;
+    this.sandboxQuerySupported = true;
   }
 
   /**
@@ -181,6 +210,29 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
     if (!this.isRunning) return;
 
     try {
+      // Sandbox is mixer-wide, not per-deck, so resolve it with a single query
+      // before paying for any deck reads. When it's on there is no "some decks
+      // are still trustworthy" case — every `is_audible` answer is meaningless
+      // — so bail out entirely and hold the last on-air track. Returning here
+      // deliberately leaves `lastSignature` untouched: when sandbox is released
+      // and the audience track is unchanged, the next poll matches and stays
+      // quiet instead of re-emitting.
+      if (await this.isSandboxed()) {
+        if (!this.sandboxActive) {
+          this.sandboxActive = true;
+          this.logger.info(
+            'VirtualDJ sandbox engaged — holding the last on-air track',
+          );
+          this.emit('sandbox', true);
+        }
+        return;
+      }
+      if (this.sandboxActive) {
+        this.sandboxActive = false;
+        this.logger.info('VirtualDJ sandbox released — resuming deck polling');
+        this.emit('sandbox', false);
+      }
+
       const snapshots = await this.readAllDecks();
       const picked = pickOnAirDeck(snapshots);
       if (!picked) {
@@ -195,6 +247,38 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => TypedEmi
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
     }
+  }
+
+  /**
+   * Ask VirtualDJ whether Sandbox mode is engaged.
+   *
+   * Degrades safely in both directions:
+   * - A transport failure returns `false` so a blip doesn't strand the poller;
+   *   the next tick asks again.
+   * - A build that doesn't implement the verb answers `error:-N`, which we
+   *   detect once and then stop querying, rather than burning a request per
+   *   tick forever on a question that will never be answered.
+   */
+  private async isSandboxed(): Promise<boolean> {
+    if (!this.sandboxQuerySupported) return false;
+
+    let raw: string;
+    try {
+      raw = await this.query(SANDBOX_QUERY);
+    } catch (err) {
+      this.logger.debug(`sandbox query failed: ${(err as Error).message}`);
+      return false;
+    }
+
+    if (isVdjError(raw)) {
+      this.sandboxQuerySupported = false;
+      this.logger.debug(
+        `VirtualDJ rejected the "${SANDBOX_QUERY}" query (${raw.trim()}); sandbox detection disabled`,
+      );
+      return false;
+    }
+
+    return parseBool(stripQuotes(raw));
   }
 
   private async readAllDecks(): Promise<DeckSnapshot[]> {
@@ -310,6 +394,14 @@ export function pickOnAirDeck(snapshots: DeckSnapshot[]): DeckSnapshot | null {
   return anyLoaded ?? null;
 }
 
+/**
+ * True when the plugin answered with a VDJScript error rather than a value —
+ * e.g. "error:-2147467259" (E_FAIL), returned for an unrecognized verb.
+ */
+function isVdjError(raw: string): boolean {
+  return /^error:-?\d+$/i.test(raw.trim());
+}
+
 function parseBool(raw: string): boolean {
   // VirtualDJ returns different truthy strings depending on the verb:
   // `loaded` → "yes"/"no", `is_audible` → "yes"/"no", others → "true"/"false" or "1"/"0".
@@ -358,7 +450,7 @@ function parseDuration(raw: string): number | undefined {
  */
 function stripQuotes(raw: string): string {
   const trimmed = raw.trim();
-  if (/^error:-?\d+$/i.test(trimmed)) return '';
+  if (isVdjError(trimmed)) return '';
   if (trimmed.length >= 2) {
     const first = trimmed[0];
     const last = trimmed[trimmed.length - 1];

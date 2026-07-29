@@ -105,4 +105,25 @@ export interface VirtualDjConnectEvents {
   error: (err: Error) => void;
 }
 
-export type TypedEmitter = StrictEventEmitter<EventEmitter, VirtualDjConnectEvents>;
+/**
+ * Events emitted by VirtualDjNetworkControl, which can additionally report
+ * mixer-wide state the M3U history watcher has no visibility into.
+ */
+export interface VirtualDjNetworkControlEvents extends VirtualDjConnectEvents {
+  /**
+   * Emitted when VirtualDJ's Sandbox mode is engaged (`true`) or released
+   * (`false`). While engaged, deck polling is suspended and the last on-air
+   * track is held, so no `track` events are emitted.
+   */
+  sandbox: (active: boolean) => void;
+}
+
+export type TypedEmitter = StrictEventEmitter<
+  EventEmitter,
+  VirtualDjConnectEvents
+>;
+
+export type NetworkControlTypedEmitter = StrictEventEmitter<
+  EventEmitter,
+  VirtualDjNetworkControlEvents
+>;
