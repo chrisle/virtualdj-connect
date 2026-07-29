@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0
+
+- feat: on-air changes are reported live instead of being frozen when the track was detected
+- docs: describe what the library actually does today, not just M3U history
+- docs: explain sandbox handling and point users at the sibling DJ connectors
+- fix: tracks rehearsed in VirtualDJ's Sandbox mode are no longer shown as now playing
+
+
 ## Unreleased
 
 - feat: live on-air state is now reported as it changes, instead of being frozen
