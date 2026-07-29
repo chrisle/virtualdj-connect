@@ -1,16 +1,34 @@
 # virtualdj-connect
 
-Library to receive track metadata from **VirtualDJ**. Two ways to read what's
-playing:
+Know what **VirtualDJ** is playing, in real time, from Node. Point it at a
+running VirtualDJ and it emits a `track` event every time the song on air
+changes.
 
-- **M3U history watcher** — polls VirtualDJ's `History/*.m3u` files (title,
-  artist, file path). Works on every VirtualDJ install with history enabled.
-- **Network Control client** — HTTP-polls VirtualDJ's
-  [Network Control Plugin](https://virtualdj.com/wiki/NetworkControlPlugin.html)
-  for richer per-deck data (BPM, key, genre, album, duration, audible state).
-  Requires the plugin to be enabled in VirtualDJ.
+Two ways to read what's playing — pick one, or run both:
 
-Supports VirtualDJ 7 and 8 on macOS and Windows.
+|                                | M3U history watcher                              | Network Control client                                                                        |
+| ------------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| **How**                        | Polls VirtualDJ's `History/*.m3u` files          | HTTP-polls the [Network Control Plugin](https://virtualdj.com/wiki/NetworkControlPlugin.html) |
+| **Setup**                      | None — works on any install with history enabled | Plugin must be enabled in VirtualDJ                                                           |
+| **Latency**                    | Written when a track is logged to history        | Sub-second, straight off the deck                                                             |
+| **Gives you**                  | Title, artist, file path                         | Title, artist, album, genre, key, BPM, duration, deck number, file path                       |
+| **Knows which deck is on air** | No                                               | Yes                                                                                           |
+
+The Network Control client is the more capable of the two. Beyond metadata it:
+
+- **Picks the on-air deck** across all four decks rather than reporting whatever
+  loaded last, falling back to any loaded deck so the display isn't blank while
+  the DJ cues up.
+- **Respects [Sandbox mode](#sandbox-mode)** — tracks the DJ is rehearsing in
+  headphones are not published as now playing.
+- **Detects Beatport streams**, flagging them and exposing the Beatport ID
+  instead of handing you a `netsearch://` URL as a file path.
+- **Survives partial VirtualDJ support** — builds that don't implement a given
+  VDJScript verb answer `error:-N`, which is coerced to an empty field rather
+  than leaking a bogus string into your track data.
+
+Runs on macOS and Windows. Verified against VirtualDJ 8.5 (build 8769); the
+installation detector also handles VirtualDJ 7 folder layouts.
 
 ## Installation
 
@@ -48,8 +66,10 @@ await vdj.stop();
 
 ## Usage — Network Control Plugin
 
-Enable the Network Control plugin in VirtualDJ first (Options → Network
-Control). Then:
+Enable the plugin in VirtualDJ first: **Config → Extensions → Effects → Other →
+Network Control**. Installing it is not enough — it has to be switched on, and
+it binds its port at that point. Its config panel is where the port
+(default 8080) and the optional bearer password live. Then:
 
 ```typescript
 import { VirtualDjNetworkControl } from "virtualdj-connect";

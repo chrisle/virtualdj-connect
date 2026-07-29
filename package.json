@@ -1,7 +1,7 @@
 {
   "name": "virtualdj-connect",
   "version": "1.1.1",
-  "description": "Library to read VirtualDJ M3U history files and emit track change events",
+  "description": "Real-time VirtualDJ track metadata for Node — M3U history watcher plus a Network Control client with per-deck data, on-air detection, and sandbox awareness",
   "license": "MIT",
   "repository": {
     "type": "git",
