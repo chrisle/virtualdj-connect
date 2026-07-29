@@ -69,7 +69,13 @@ export type VirtualDjTrackPayload = {
   duration?: number;
   /** Deck (1-4) the track is loaded on, when known. */
   deck?: number;
-  /** True when VirtualDJ reported this deck as audible (`is_audible`). */
+  /**
+   * Whether VirtualDJ reported this deck as audible (`is_audible`) **at the
+   * moment the track was detected**. This is a snapshot, not live state — a
+   * track cued silently and then played keeps `isOnAir: false`, because
+   * playing it is not a new song and does not re-fire `track`. Subscribe to
+   * the `onair` event on VirtualDjNetworkControl for live audibility.
+   */
   isOnAir?: boolean;
   filePath?: string;
   fileLocation: string;
@@ -116,6 +122,21 @@ export interface VirtualDjNetworkControlEvents extends VirtualDjConnectEvents {
    * track is held, so no `track` events are emitted.
    */
   sandbox: (active: boolean) => void;
+  /**
+   * Emitted when the audible deck changes — including going fully silent
+   * (`active === false`, where `deck` is meaningless and reports the deck that
+   * just went off air).
+   *
+   * This is the live counterpart to the `isOnAir` field on a track payload,
+   * which is only a snapshot from the moment the song was detected. Audibility
+   * changes many times during a song, so it gets its own event rather than
+   * re-firing `track` — a `track` event means a new song, and consumers that
+   * log history depend on that.
+   *
+   * Not emitted while Sandbox mode is engaged: deck audibility is meaningless
+   * then, and the audience is still hearing the held track.
+   */
+  onair: (active: boolean, deck: number) => void;
 }
 
 export type TypedEmitter = StrictEventEmitter<

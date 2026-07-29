@@ -97,6 +97,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
   private lastSignature = '';
   private sandboxActive = false;
   private sandboxQuerySupported = true;
+  private lastOnAir: { active: boolean; deck: number } | null = null;
 
   constructor(options: VirtualDjNetworkControlOptions = {}) {
     super();
@@ -124,6 +125,19 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
   /** True while VirtualDJ's Sandbox mode is engaged and polling is suspended. */
   get sandboxed(): boolean {
     return this.sandboxActive;
+  }
+
+  /**
+   * Whether a deck is currently audible, as of the last poll. Unlike the
+   * `isOnAir` field on a track payload, this tracks live state.
+   */
+  get onAir(): boolean {
+    return this.lastOnAir?.active ?? false;
+  }
+
+  /** The deck that is currently audible, or 0 when nothing is on air. */
+  get onAirDeck(): number {
+    return this.lastOnAir?.active ? this.lastOnAir.deck : 0;
   }
 
   /**
@@ -168,6 +182,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
     this.lastSignature = '';
     this.sandboxActive = false;
     this.sandboxQuerySupported = true;
+    this.lastOnAir = null;
   }
 
   /**
@@ -236,17 +251,45 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
       const snapshots = await this.readAllDecks();
       const picked = pickOnAirDeck(snapshots);
       if (!picked) {
+        // Nothing loaded anywhere, so nothing can be on air. The last `track`
+        // still stands — an empty deck is not a new song.
+        this.updateOnAir(false, this.lastOnAir?.deck ?? 0);
         return;
       }
 
+      // `track` means "the song changed", so it stays keyed on song identity
+      // alone. Audibility deliberately does NOT participate: folding it into
+      // the signature would fire a full track event every time a fader moves,
+      // and consumers that read `track` as "a new song started" would write
+      // duplicate history rows.
       const signature = `${picked.artist}|${picked.title}|${picked.path}`;
-      if (signature === this.lastSignature) return;
+      if (signature !== this.lastSignature) {
+        this.lastSignature = signature;
+        this.emit('track', this.buildPayload(picked));
+      }
 
-      this.lastSignature = signature;
-      this.emit('track', this.buildPayload(picked));
+      // Audibility changes underneath a song, so it gets its own event. Emitted
+      // after `track` so a consumer always learns which song it refers to first.
+      this.updateOnAir(picked.audible, picked.deck);
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
     }
+  }
+
+  /**
+   * Announce a change in which deck (if any) is actually audible.
+   *
+   * Off-air carries no meaningful deck, so it collapses to a single transition
+   * rather than being re-announced once per deck that fell silent.
+   */
+  private updateOnAir(active: boolean, deck: number): void {
+    const changed = active
+      ? this.lastOnAir?.active !== true || this.lastOnAir.deck !== deck
+      : this.lastOnAir?.active !== false;
+    if (!changed) return;
+
+    this.lastOnAir = { active, deck };
+    this.emit('onair', active, deck);
   }
 
   /**

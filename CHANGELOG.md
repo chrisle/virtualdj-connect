@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- feat: live on-air state is now reported as it changes, instead of being frozen
+  at the moment a track was detected
+
 - fix: tracks the DJ rehearses in Sandbox mode no longer get published as now
   playing (thanks @m1ng)
 - docs: document sandbox handling and link the related DJ connector libraries

@@ -379,6 +379,202 @@ describe('VirtualDjNetworkControl', () => {
     });
   });
 
+  describe('on-air state', () => {
+    /**
+     * Deck 1 responses with `loaded` and `is_audible` under the test's control,
+     * so a song can be cued silently and then played without changing identity.
+     */
+    function deckFetch(state: {
+      audible: () => string;
+      sandbox?: () => string;
+    }) {
+      const fields: Record<string, string> = {
+        get_clock: '1',
+        'deck 1 loaded': 'yes',
+        "deck 1 get_loaded_song 'title'": 'Strobe',
+        "deck 1 get_loaded_song 'artist'": 'deadmau5',
+        "deck 1 get_loaded_song 'album'": '',
+        "deck 1 get_loaded_song 'genre'": '',
+        "deck 1 get_loaded_song 'key'": '',
+        'deck 1 get_bpm absolute': '',
+        'deck 1 get_time total': '',
+        'deck 1 get_filepath': '/Music/Strobe.mp3',
+      };
+      return vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(
+          typeof input === 'string' ? input : input.toString(),
+        );
+        const script = url.searchParams.get('script') ?? '';
+        let body: string | undefined;
+        if (script === 'deck 1 is_audible') body = state.audible();
+        else if (script === 'sandbox') body = state.sandbox?.() ?? 'no';
+        else body = fields[script];
+        if (body === undefined) {
+          return { ok: false, status: 500, text: async () => '' } as Response;
+        }
+        return { ok: true, status: 200, text: async () => body } as Response;
+      }) as unknown as typeof fetch;
+    }
+
+    it('reports a track cued silently and then played, without re-emitting the track', async () => {
+      // The regression: `isOnAir` is a snapshot taken when the song was first
+      // detected, so pressing play does not update it. `onair` carries the live
+      // state instead, and `track` stays keyed on song identity so history
+      // consumers do not log a duplicate.
+      let audible = 'no';
+      const fetchFn = deckFetch({ audible: () => audible });
+
+      control = new VirtualDjNetworkControl({
+        fetchFn,
+        decks: [1],
+        pollIntervalMs: 1000,
+      });
+      const track = vi.fn();
+      const onair = vi.fn();
+      control.on('track', track);
+      control.on('onair', onair);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(track).toHaveBeenCalledTimes(1);
+      expect(track.mock.calls[0]![0].isOnAir).toBe(false);
+      // The deck is loaded but silent, so it is named even though it is off air.
+      expect(onair).toHaveBeenCalledExactlyOnceWith(false, 1);
+      expect(control.onAir).toBe(false);
+      expect(control.onAirDeck).toBe(0);
+
+      audible = 'yes';
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(track).toHaveBeenCalledTimes(1); // same song — no duplicate
+      expect(onair).toHaveBeenCalledTimes(2);
+      expect(onair).toHaveBeenLastCalledWith(true, 1);
+      expect(control.onAir).toBe(true);
+      expect(control.onAirDeck).toBe(1);
+    });
+
+    it('announces going off air and does not repeat it', async () => {
+      let audible = 'yes';
+      const fetchFn = deckFetch({ audible: () => audible });
+
+      control = new VirtualDjNetworkControl({
+        fetchFn,
+        decks: [1],
+        pollIntervalMs: 1000,
+      });
+      const onair = vi.fn();
+      control.on('onair', onair);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+      expect(onair).toHaveBeenCalledExactlyOnceWith(true, 1);
+
+      audible = 'no';
+      await vi.advanceTimersByTimeAsync(1100);
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(onair).toHaveBeenCalledTimes(2);
+      expect(onair).toHaveBeenLastCalledWith(false, 1);
+      expect(control.onAirDeck).toBe(0);
+    });
+
+    it('stays quiet while audibility is unchanged', async () => {
+      const fetchFn = deckFetch({ audible: () => 'yes' });
+
+      control = new VirtualDjNetworkControl({
+        fetchFn,
+        decks: [1],
+        pollIntervalMs: 1000,
+      });
+      const onair = vi.fn();
+      control.on('onair', onair);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(1100);
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(onair).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not report going off air while sandbox holds the track', async () => {
+      // The audience is still hearing the held track, so claiming it went off
+      // air would be a lie — and deck audibility is meaningless in sandbox.
+      let sandbox = 'no';
+      const fetchFn = deckFetch({
+        audible: () => 'yes',
+        sandbox: () => sandbox,
+      });
+
+      control = new VirtualDjNetworkControl({
+        fetchFn,
+        decks: [1],
+        pollIntervalMs: 1000,
+      });
+      const onair = vi.fn();
+      control.on('onair', onair);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+      expect(onair).toHaveBeenCalledExactlyOnceWith(true, 1);
+
+      sandbox = 'yes';
+      await vi.advanceTimersByTimeAsync(1100);
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(onair).toHaveBeenCalledTimes(1);
+      expect(control.onAir).toBe(true);
+    });
+
+    it('reports off air when every deck empties', async () => {
+      let loaded = 'yes';
+      const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(
+          typeof input === 'string' ? input : input.toString(),
+        );
+        const script = url.searchParams.get('script') ?? '';
+        const fields: Record<string, string> = {
+          get_clock: '1',
+          sandbox: 'no',
+          'deck 1 loaded': loaded,
+          'deck 1 is_audible': 'yes',
+          "deck 1 get_loaded_song 'title'": 'Strobe',
+          "deck 1 get_loaded_song 'artist'": 'deadmau5',
+          "deck 1 get_loaded_song 'album'": '',
+          "deck 1 get_loaded_song 'genre'": '',
+          "deck 1 get_loaded_song 'key'": '',
+          'deck 1 get_bpm absolute': '',
+          'deck 1 get_time total': '',
+          'deck 1 get_filepath': '/Music/Strobe.mp3',
+        };
+        const body = fields[script];
+        if (body === undefined) {
+          return { ok: false, status: 500, text: async () => '' } as Response;
+        }
+        return { ok: true, status: 200, text: async () => body } as Response;
+      }) as unknown as typeof fetch;
+
+      control = new VirtualDjNetworkControl({
+        fetchFn,
+        decks: [1],
+        pollIntervalMs: 1000,
+      });
+      const onair = vi.fn();
+      control.on('onair', onair);
+
+      await control.start();
+      await vi.runOnlyPendingTimersAsync();
+      expect(onair).toHaveBeenCalledExactlyOnceWith(true, 1);
+
+      loaded = 'no';
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(onair).toHaveBeenCalledTimes(2);
+      expect(onair).toHaveBeenLastCalledWith(false, 1);
+    });
+  });
+
   describe('sandbox mode', () => {
     /**
      * Deck responses for a normal on-air read, so each sandbox test only has to

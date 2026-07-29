@@ -115,6 +115,28 @@ nc.on("sandbox", (active) => {
 nc.sandboxed; // current state, also readable synchronously
 ```
 
+### Live on-air state
+
+`track` means **the song changed**, and is deduplicated on song identity alone.
+Audibility deliberately isn't part of that key — folding it in would fire a full
+track event every time a fader moves, and anything treating `track` as "a new
+song started" would log duplicate history rows.
+
+Audibility gets its own event instead:
+
+```typescript
+nc.on("onair", (active, deck) => {
+  console.log(active ? `deck ${deck} is audible` : "nothing on air");
+});
+
+nc.onAir; // boolean, live
+nc.onAirDeck; // audible deck number, or 0
+```
+
+It fires when the audible deck changes or everything goes silent, and stays
+quiet while Sandbox is engaged — the audience is still hearing the held track,
+so claiming it went off air would be wrong.
+
 ## API
 
 ### `new VirtualDjConnect(options?)`
@@ -148,9 +170,10 @@ Both classes emit:
 
 `VirtualDjNetworkControl` additionally emits:
 
-| Event     | Payload   | Description                                             |
-| --------- | --------- | ------------------------------------------------------- |
-| `sandbox` | `boolean` | Sandbox mode was engaged (`true`) or released (`false`) |
+| Event     | Payload                           | Description                                             |
+| --------- | --------------------------------- | ------------------------------------------------------- |
+| `sandbox` | `boolean`                         | Sandbox mode was engaged (`true`) or released (`false`) |
+| `onair`   | `(active: boolean, deck: number)` | The audible deck changed, or everything went silent     |
 
 ### `VirtualDjTrackPayload`
 
@@ -158,7 +181,10 @@ Both classes emit:
 - `bpm` — original BPM (unaffected by pitch), when known
 - `duration` — track length in seconds, when known
 - `deck` — deck number (1-4), when known
-- `isOnAir` — true when VirtualDJ reported the deck as audible
+- `isOnAir` — whether the deck was audible **when the track was detected**. This
+  is a snapshot, not live state: a track cued silently and then played keeps
+  `isOnAir: false`, because playing it is not a new song and does not re-fire
+  `track`. Use the [`onair` event](#live-on-air-state) for live audibility.
 - `filePath`, `fileLocation`
 - `isBeatportStream`, `beatportId` — set when the track is a Beatport stream
 
@@ -170,6 +196,8 @@ Both classes emit:
 | `baseUrl`      | `string`  | Resolved `http://host:port` of the plugin                   |
 | `pollInterval` | `number`  | Current poll interval in ms                                 |
 | `sandboxed`    | `boolean` | True while Sandbox mode is engaged and polling is suspended |
+| `onAir`        | `boolean` | Whether any deck is currently audible                       |
+| `onAirDeck`    | `number`  | The audible deck, or `0` when nothing is on air             |
 
 ### Detection utilities
 
