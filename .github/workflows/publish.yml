@@ -24,8 +24,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          # Node 24, matching the consuming app's .nvmrc and the sibling connect
+          # repos. npm 12 (installed below) requires
+          # ^22.22.2 || ^24.15.0 || >=26.0.0.
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+
+      # `npm publish --provenance` below authenticates via OIDC trusted
+      # publishing, which the npm bundled with Node does not support. Without
+      # this upgrade the registry rejects the PUT as a misleading 404, which is
+      # how v1.2.0 was tagged here but never reached npm.
+      - name: Upgrade npm for OIDC trusted publishing
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         # virtualdj-connect intentionally does not commit package-lock.json
