@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { VirtualDjNetworkControl, pickOnAirDeck } from './networkControl.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { VirtualDjNetworkControl, pickOnAirDeck } from "./networkControl.js";
 
 /**
  * Build a mock fetch that returns canned responses based on the `script=`
@@ -13,8 +13,8 @@ function buildFetch(
   },
 ): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL) => {
-    const url = new URL(typeof input === 'string' ? input : input.toString());
-    const script = url.searchParams.get('script') ?? '';
+    const url = new URL(typeof input === "string" ? input : input.toString());
+    const script = url.searchParams.get("script") ?? "";
     const body = map[script];
     if (body === undefined) {
       return {
@@ -38,72 +38,72 @@ function buildFetch(
   }) as unknown as typeof fetch;
 }
 
-describe('pickOnAirDeck', () => {
-  it('prefers an audible loaded deck', () => {
+describe("pickOnAirDeck", () => {
+  it("prefers an audible loaded deck", () => {
     const picked = pickOnAirDeck([
       {
         deck: 1,
         loaded: true,
         audible: false,
-        title: 'A',
-        artist: '',
-        album: '',
-        path: '',
+        title: "A",
+        artist: "",
+        album: "",
+        path: "",
       },
       {
         deck: 2,
         loaded: true,
         audible: true,
-        title: 'B',
-        artist: '',
-        album: '',
-        path: '',
+        title: "B",
+        artist: "",
+        album: "",
+        path: "",
       },
     ]);
     expect(picked?.deck).toBe(2);
   });
 
-  it('falls back to any loaded deck when none are audible', () => {
+  it("falls back to any loaded deck when none are audible", () => {
     const picked = pickOnAirDeck([
       {
         deck: 1,
         loaded: false,
         audible: false,
-        title: '',
-        artist: '',
-        album: '',
-        path: '',
+        title: "",
+        artist: "",
+        album: "",
+        path: "",
       },
       {
         deck: 2,
         loaded: true,
         audible: false,
-        title: 'B',
-        artist: '',
-        album: '',
-        path: '',
+        title: "B",
+        artist: "",
+        album: "",
+        path: "",
       },
     ]);
     expect(picked?.deck).toBe(2);
   });
 
-  it('returns null when no deck is loaded', () => {
+  it("returns null when no deck is loaded", () => {
     const picked = pickOnAirDeck([
       {
         deck: 1,
         loaded: false,
         audible: false,
-        title: '',
-        artist: '',
-        album: '',
-        path: '',
+        title: "",
+        artist: "",
+        album: "",
+        path: "",
       },
     ]);
     expect(picked).toBeNull();
   });
 });
 
-describe('VirtualDjNetworkControl', () => {
+describe("VirtualDjNetworkControl", () => {
   let control: VirtualDjNetworkControl;
 
   beforeEach(() => {
@@ -115,27 +115,27 @@ describe('VirtualDjNetworkControl', () => {
     vi.useRealTimers();
   });
 
-  it('emits ready after a successful handshake', async () => {
-    const fetchFn = buildFetch({ get_clock: '123456' });
+  it("emits ready after a successful handshake", async () => {
+    const fetchFn = buildFetch({ get_clock: "123456" });
     control = new VirtualDjNetworkControl({ fetchFn, decks: [] });
     const ready = vi.fn();
-    control.on('ready', ready);
+    control.on("ready", ready);
 
     await control.start();
 
-    expect(ready).toHaveBeenCalledWith({ basePath: 'http://127.0.0.1:8080' });
+    expect(ready).toHaveBeenCalledWith({ basePath: "http://127.0.0.1:8080" });
   });
 
-  it('emits error and stays stopped when handshake fails', async () => {
+  it("emits error and stays stopped when handshake fails", async () => {
     const fetchFn = buildFetch(
-      { get_clock: 'unauthorized' },
+      { get_clock: "unauthorized" },
       { notOk: true, status: 401 },
     );
     control = new VirtualDjNetworkControl({ fetchFn, decks: [] });
     const ready = vi.fn();
     const error = vi.fn();
-    control.on('ready', ready);
-    control.on('error', error);
+    control.on("ready", ready);
+    control.on("error", error);
 
     await control.start();
 
@@ -145,24 +145,24 @@ describe('VirtualDjNetworkControl', () => {
     expect(control.running).toBe(false);
   });
 
-  it('emits a track for the audible deck on first poll with full metadata', async () => {
+  it("emits a track for the audible deck on first poll with full metadata", async () => {
     const fetchFn = buildFetch({
-      get_clock: '1',
-      'deck 1 loaded': 'true',
-      'deck 1 is_audible': 'true',
+      get_clock: "1",
+      "deck 1 loaded": "true",
+      "deck 1 is_audible": "true",
       "deck 1 get_loaded_song 'title'": '"Strobe"',
       "deck 1 get_loaded_song 'artist'": '"deadmau5"',
       "deck 1 get_loaded_song 'album'": '"For Lack of a Better Name"',
-      "deck 1 get_loaded_song 'genre'": 'Progressive House',
-      "deck 1 get_loaded_song 'key'": 'Bm',
-      'deck 1 get_bpm absolute': '128.00',
-      'deck 1 get_time total': '10:33',
-      'deck 1 get_filepath': '/Users/dj/Music/Strobe.mp3',
+      "deck 1 get_loaded_song 'genre'": "Progressive House",
+      "deck 1 get_loaded_song 'key'": "Bm",
+      "deck 1 get_bpm absolute": "128.00",
+      "deck 1 get_time total": "10:33",
+      "deck 1 get_filepath": "/Users/dj/Music/Strobe.mp3",
     });
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
     const track = vi.fn();
-    control.on('track', track);
+    control.on("track", track);
 
     await control.start();
     // First poll runs immediately after handshake. Let the microtasks settle.
@@ -170,37 +170,37 @@ describe('VirtualDjNetworkControl', () => {
 
     expect(track).toHaveBeenCalledTimes(1);
     expect(track.mock.calls[0]![0]).toMatchObject({
-      title: 'Strobe',
-      artist: 'deadmau5',
-      album: 'For Lack of a Better Name',
-      genre: 'Progressive House',
-      key: 'Bm',
+      title: "Strobe",
+      artist: "deadmau5",
+      album: "For Lack of a Better Name",
+      genre: "Progressive House",
+      key: "Bm",
       bpm: 128,
       duration: 633,
       deck: 1,
       isOnAir: true,
-      filePath: '/Users/dj/Music/Strobe.mp3',
-      fileLocation: '/Users/dj/Music/Strobe.mp3',
+      filePath: "/Users/dj/Music/Strobe.mp3",
+      fileLocation: "/Users/dj/Music/Strobe.mp3",
       isBeatportStream: false,
     });
   });
 
-  it('tolerates missing optional fields without dropping the track', async () => {
+  it("tolerates missing optional fields without dropping the track", async () => {
     // Simulate a VirtualDJ build where get_bpm and get_time total are not
     // implemented — those queries return HTTP 500 from the mock server.
     const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
-      const url = new URL(typeof input === 'string' ? input : input.toString());
-      const script = url.searchParams.get('script') ?? '';
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      const script = url.searchParams.get("script") ?? "";
       const okResponses: Record<string, string> = {
-        get_clock: '1',
-        'deck 1 loaded': 'true',
-        'deck 1 is_audible': 'true',
-        "deck 1 get_loaded_song 'title'": 'Nightshift',
-        "deck 1 get_loaded_song 'artist'": 'Commodores',
-        "deck 1 get_loaded_song 'album'": '',
-        "deck 1 get_loaded_song 'genre'": '',
-        "deck 1 get_loaded_song 'key'": '',
-        'deck 1 get_filepath': '/Music/Nightshift.mp3',
+        get_clock: "1",
+        "deck 1 loaded": "true",
+        "deck 1 is_audible": "true",
+        "deck 1 get_loaded_song 'title'": "Nightshift",
+        "deck 1 get_loaded_song 'artist'": "Commodores",
+        "deck 1 get_loaded_song 'album'": "",
+        "deck 1 get_loaded_song 'genre'": "",
+        "deck 1 get_loaded_song 'key'": "",
+        "deck 1 get_filepath": "/Music/Nightshift.mp3",
       };
       if (script in okResponses) {
         return {
@@ -209,44 +209,44 @@ describe('VirtualDjNetworkControl', () => {
           text: async () => okResponses[script]!,
         } as Response;
       }
-      return { ok: false, status: 500, text: async () => '' } as Response;
+      return { ok: false, status: 500, text: async () => "" } as Response;
     }) as unknown as typeof fetch;
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
     const track = vi.fn();
-    control.on('track', track);
+    control.on("track", track);
 
     await control.start();
     await vi.runOnlyPendingTimersAsync();
 
     expect(track).toHaveBeenCalledTimes(1);
     expect(track.mock.calls[0]![0]).toMatchObject({
-      title: 'Nightshift',
-      artist: 'Commodores',
+      title: "Nightshift",
+      artist: "Commodores",
       deck: 1,
     });
     expect(track.mock.calls[0]![0].bpm).toBeUndefined();
     expect(track.mock.calls[0]![0].duration).toBeUndefined();
   });
 
-  it('parses duration as raw seconds when VirtualDJ returns a number', async () => {
+  it("parses duration as raw seconds when VirtualDJ returns a number", async () => {
     const fetchFn = buildFetch({
-      get_clock: '1',
-      'deck 1 loaded': 'true',
-      'deck 1 is_audible': 'true',
-      "deck 1 get_loaded_song 'title'": 'x',
-      "deck 1 get_loaded_song 'artist'": 'y',
-      "deck 1 get_loaded_song 'album'": '',
-      "deck 1 get_loaded_song 'genre'": '',
-      "deck 1 get_loaded_song 'key'": '',
-      'deck 1 get_bpm absolute': '',
-      'deck 1 get_time total': '243.5',
-      'deck 1 get_filepath': '/m.mp3',
+      get_clock: "1",
+      "deck 1 loaded": "true",
+      "deck 1 is_audible": "true",
+      "deck 1 get_loaded_song 'title'": "x",
+      "deck 1 get_loaded_song 'artist'": "y",
+      "deck 1 get_loaded_song 'album'": "",
+      "deck 1 get_loaded_song 'genre'": "",
+      "deck 1 get_loaded_song 'key'": "",
+      "deck 1 get_bpm absolute": "",
+      "deck 1 get_time total": "243.5",
+      "deck 1 get_filepath": "/m.mp3",
     });
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
     const track = vi.fn();
-    control.on('track', track);
+    control.on("track", track);
 
     await control.start();
     await vi.runOnlyPendingTimersAsync();
@@ -254,19 +254,19 @@ describe('VirtualDjNetworkControl', () => {
     expect(track.mock.calls[0]![0].duration).toBe(243.5);
   });
 
-  it('does not emit a duplicate track while the audible song is unchanged', async () => {
+  it("does not emit a duplicate track while the audible song is unchanged", async () => {
     const fetchFn = buildFetch({
-      get_clock: '1',
-      'deck 1 loaded': 'true',
-      'deck 1 is_audible': 'true',
-      "deck 1 get_loaded_song 'title'": 'Strobe',
-      "deck 1 get_loaded_song 'artist'": 'deadmau5',
-      "deck 1 get_loaded_song 'album'": '',
-      "deck 1 get_loaded_song 'genre'": '',
-      "deck 1 get_loaded_song 'key'": '',
-      'deck 1 get_bpm absolute': '',
-      'deck 1 get_time total': '',
-      'deck 1 get_filepath': '/Users/dj/Music/Strobe.mp3',
+      get_clock: "1",
+      "deck 1 loaded": "true",
+      "deck 1 is_audible": "true",
+      "deck 1 get_loaded_song 'title'": "Strobe",
+      "deck 1 get_loaded_song 'artist'": "deadmau5",
+      "deck 1 get_loaded_song 'album'": "",
+      "deck 1 get_loaded_song 'genre'": "",
+      "deck 1 get_loaded_song 'key'": "",
+      "deck 1 get_bpm absolute": "",
+      "deck 1 get_time total": "",
+      "deck 1 get_filepath": "/Users/dj/Music/Strobe.mp3",
     });
 
     control = new VirtualDjNetworkControl({
@@ -275,7 +275,7 @@ describe('VirtualDjNetworkControl', () => {
       pollIntervalMs: 1000,
     });
     const track = vi.fn();
-    control.on('track', track);
+    control.on("track", track);
 
     await control.start();
     await vi.runOnlyPendingTimersAsync();
@@ -290,29 +290,29 @@ describe('VirtualDjNetworkControl', () => {
     // unrecognized verbs. Passing that string downstream as a file path
     // breaks artwork extraction, so it must be coerced to empty.
     const fetchFn = buildFetch({
-      get_clock: '1',
-      'deck 1 loaded': 'yes',
-      'deck 1 is_audible': 'yes',
+      get_clock: "1",
+      "deck 1 loaded": "yes",
+      "deck 1 is_audible": "yes",
       "deck 1 get_loaded_song 'title'": '"Opus"',
       "deck 1 get_loaded_song 'artist'": '"Eric Prydz"',
-      "deck 1 get_loaded_song 'album'": '',
-      "deck 1 get_loaded_song 'genre'": '',
-      "deck 1 get_loaded_song 'key'": '',
-      'deck 1 get_bpm absolute': '',
-      'deck 1 get_time total': '',
-      'deck 1 get_filepath': 'error:-2147467259',
+      "deck 1 get_loaded_song 'album'": "",
+      "deck 1 get_loaded_song 'genre'": "",
+      "deck 1 get_loaded_song 'key'": "",
+      "deck 1 get_bpm absolute": "",
+      "deck 1 get_time total": "",
+      "deck 1 get_filepath": "error:-2147467259",
     });
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
     const track = vi.fn();
-    control.on('track', track);
+    control.on("track", track);
 
     await control.start();
     await vi.runOnlyPendingTimersAsync();
 
     expect(track).toHaveBeenCalledTimes(1);
     expect(track.mock.calls[0]![0].filePath).toBeUndefined();
-    expect(track.mock.calls[0]![0].fileLocation).toBe('');
+    expect(track.mock.calls[0]![0].fileLocation).toBe("");
   });
 
   it('parses VirtualDJ\'s "yes"/"no" boolean responses', async () => {
@@ -320,53 +320,53 @@ describe('VirtualDjNetworkControl', () => {
     // "true"/"false". Earlier revisions of parseBool only matched "true",
     // which made the poller think no decks were ever loaded.
     const fetchFn = buildFetch({
-      get_clock: '1',
-      'deck 1 loaded': 'yes',
-      'deck 1 is_audible': 'yes',
+      get_clock: "1",
+      "deck 1 loaded": "yes",
+      "deck 1 is_audible": "yes",
       "deck 1 get_loaded_song 'title'": '"Strobe"',
       "deck 1 get_loaded_song 'artist'": '"deadmau5"',
-      "deck 1 get_loaded_song 'album'": '',
-      "deck 1 get_loaded_song 'genre'": '',
-      "deck 1 get_loaded_song 'key'": '',
-      'deck 1 get_bpm absolute': '',
-      'deck 1 get_time total': '',
-      'deck 1 get_filepath': '/Music/Strobe.mp3',
+      "deck 1 get_loaded_song 'album'": "",
+      "deck 1 get_loaded_song 'genre'": "",
+      "deck 1 get_loaded_song 'key'": "",
+      "deck 1 get_bpm absolute": "",
+      "deck 1 get_time total": "",
+      "deck 1 get_filepath": "/Music/Strobe.mp3",
     });
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
     const track = vi.fn();
-    control.on('track', track);
+    control.on("track", track);
 
     await control.start();
     await vi.runOnlyPendingTimersAsync();
 
     expect(track).toHaveBeenCalledTimes(1);
     expect(track.mock.calls[0]![0]).toMatchObject({
-      title: 'Strobe',
-      artist: 'deadmau5',
+      title: "Strobe",
+      artist: "deadmau5",
       isOnAir: true,
       deck: 1,
     });
   });
 
-  it('detects Beatport streaming URLs and omits filePath', async () => {
+  it("detects Beatport streaming URLs and omits filePath", async () => {
     const fetchFn = buildFetch({
-      get_clock: '1',
-      'deck 1 loaded': 'true',
-      'deck 1 is_audible': 'true',
-      "deck 1 get_loaded_song 'title'": 'Phuture',
-      "deck 1 get_loaded_song 'artist'": 'Your Mind',
-      "deck 1 get_loaded_song 'album'": '',
-      "deck 1 get_loaded_song 'genre'": '',
-      "deck 1 get_loaded_song 'key'": '',
-      'deck 1 get_bpm absolute': '',
-      'deck 1 get_time total': '',
-      'deck 1 get_filepath': 'netsearch://bp12345',
+      get_clock: "1",
+      "deck 1 loaded": "true",
+      "deck 1 is_audible": "true",
+      "deck 1 get_loaded_song 'title'": "Phuture",
+      "deck 1 get_loaded_song 'artist'": "Your Mind",
+      "deck 1 get_loaded_song 'album'": "",
+      "deck 1 get_loaded_song 'genre'": "",
+      "deck 1 get_loaded_song 'key'": "",
+      "deck 1 get_bpm absolute": "",
+      "deck 1 get_time total": "",
+      "deck 1 get_filepath": "netsearch://bp12345",
     });
 
     control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
     const track = vi.fn();
-    control.on('track', track);
+    control.on("track", track);
 
     await control.start();
     await vi.runOnlyPendingTimersAsync();
@@ -375,11 +375,11 @@ describe('VirtualDjNetworkControl', () => {
       isBeatportStream: true,
       beatportId: 12345,
       filePath: undefined,
-      fileLocation: 'netsearch://bp12345',
+      fileLocation: "netsearch://bp12345",
     });
   });
 
-  describe('on-air state', () => {
+  describe("on-air state", () => {
     /**
      * Deck 1 responses with `loaded` and `is_audible` under the test's control,
      * so a song can be cued silently and then played without changing identity.
@@ -389,39 +389,39 @@ describe('VirtualDjNetworkControl', () => {
       sandbox?: () => string;
     }) {
       const fields: Record<string, string> = {
-        get_clock: '1',
-        'deck 1 loaded': 'yes',
-        "deck 1 get_loaded_song 'title'": 'Strobe',
-        "deck 1 get_loaded_song 'artist'": 'deadmau5',
-        "deck 1 get_loaded_song 'album'": '',
-        "deck 1 get_loaded_song 'genre'": '',
-        "deck 1 get_loaded_song 'key'": '',
-        'deck 1 get_bpm absolute': '',
-        'deck 1 get_time total': '',
-        'deck 1 get_filepath': '/Music/Strobe.mp3',
+        get_clock: "1",
+        "deck 1 loaded": "yes",
+        "deck 1 get_loaded_song 'title'": "Strobe",
+        "deck 1 get_loaded_song 'artist'": "deadmau5",
+        "deck 1 get_loaded_song 'album'": "",
+        "deck 1 get_loaded_song 'genre'": "",
+        "deck 1 get_loaded_song 'key'": "",
+        "deck 1 get_bpm absolute": "",
+        "deck 1 get_time total": "",
+        "deck 1 get_filepath": "/Music/Strobe.mp3",
       };
       return vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(
-          typeof input === 'string' ? input : input.toString(),
+          typeof input === "string" ? input : input.toString(),
         );
-        const script = url.searchParams.get('script') ?? '';
+        const script = url.searchParams.get("script") ?? "";
         let body: string | undefined;
-        if (script === 'deck 1 is_audible') body = state.audible();
-        else if (script === 'sandbox') body = state.sandbox?.() ?? 'no';
+        if (script === "deck 1 is_audible") body = state.audible();
+        else if (script === "sandbox") body = state.sandbox?.() ?? "no";
         else body = fields[script];
         if (body === undefined) {
-          return { ok: false, status: 500, text: async () => '' } as Response;
+          return { ok: false, status: 500, text: async () => "" } as Response;
         }
         return { ok: true, status: 200, text: async () => body } as Response;
       }) as unknown as typeof fetch;
     }
 
-    it('reports a track cued silently and then played, without re-emitting the track', async () => {
+    it("reports a track cued silently and then played, without re-emitting the track", async () => {
       // The regression: `isOnAir` is a snapshot taken when the song was first
       // detected, so pressing play does not update it. `onair` carries the live
       // state instead, and `track` stays keyed on song identity so history
       // consumers do not log a duplicate.
-      let audible = 'no';
+      let audible = "no";
       const fetchFn = deckFetch({ audible: () => audible });
 
       control = new VirtualDjNetworkControl({
@@ -431,8 +431,8 @@ describe('VirtualDjNetworkControl', () => {
       });
       const track = vi.fn();
       const onair = vi.fn();
-      control.on('track', track);
-      control.on('onair', onair);
+      control.on("track", track);
+      control.on("onair", onair);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
@@ -444,7 +444,7 @@ describe('VirtualDjNetworkControl', () => {
       expect(control.onAir).toBe(false);
       expect(control.onAirDeck).toBe(0);
 
-      audible = 'yes';
+      audible = "yes";
       await vi.advanceTimersByTimeAsync(1100);
 
       expect(track).toHaveBeenCalledTimes(1); // same song — no duplicate
@@ -454,8 +454,8 @@ describe('VirtualDjNetworkControl', () => {
       expect(control.onAirDeck).toBe(1);
     });
 
-    it('announces going off air and does not repeat it', async () => {
-      let audible = 'yes';
+    it("announces going off air and does not repeat it", async () => {
+      let audible = "yes";
       const fetchFn = deckFetch({ audible: () => audible });
 
       control = new VirtualDjNetworkControl({
@@ -464,13 +464,13 @@ describe('VirtualDjNetworkControl', () => {
         pollIntervalMs: 1000,
       });
       const onair = vi.fn();
-      control.on('onair', onair);
+      control.on("onair", onair);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
       expect(onair).toHaveBeenCalledExactlyOnceWith(true, 1);
 
-      audible = 'no';
+      audible = "no";
       await vi.advanceTimersByTimeAsync(1100);
       await vi.advanceTimersByTimeAsync(1100);
 
@@ -479,8 +479,8 @@ describe('VirtualDjNetworkControl', () => {
       expect(control.onAirDeck).toBe(0);
     });
 
-    it('stays quiet while audibility is unchanged', async () => {
-      const fetchFn = deckFetch({ audible: () => 'yes' });
+    it("stays quiet while audibility is unchanged", async () => {
+      const fetchFn = deckFetch({ audible: () => "yes" });
 
       control = new VirtualDjNetworkControl({
         fetchFn,
@@ -488,7 +488,7 @@ describe('VirtualDjNetworkControl', () => {
         pollIntervalMs: 1000,
       });
       const onair = vi.fn();
-      control.on('onair', onair);
+      control.on("onair", onair);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
@@ -498,12 +498,12 @@ describe('VirtualDjNetworkControl', () => {
       expect(onair).toHaveBeenCalledTimes(1);
     });
 
-    it('does not report going off air while sandbox holds the track', async () => {
+    it("does not report going off air while sandbox holds the track", async () => {
       // The audience is still hearing the held track, so claiming it went off
       // air would be a lie — and deck audibility is meaningless in sandbox.
-      let sandbox = 'no';
+      let sandbox = "no";
       const fetchFn = deckFetch({
-        audible: () => 'yes',
+        audible: () => "yes",
         sandbox: () => sandbox,
       });
 
@@ -513,13 +513,13 @@ describe('VirtualDjNetworkControl', () => {
         pollIntervalMs: 1000,
       });
       const onair = vi.fn();
-      control.on('onair', onair);
+      control.on("onair", onair);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
       expect(onair).toHaveBeenCalledExactlyOnceWith(true, 1);
 
-      sandbox = 'yes';
+      sandbox = "yes";
       await vi.advanceTimersByTimeAsync(1100);
       await vi.advanceTimersByTimeAsync(1100);
 
@@ -527,30 +527,30 @@ describe('VirtualDjNetworkControl', () => {
       expect(control.onAir).toBe(true);
     });
 
-    it('reports off air when every deck empties', async () => {
-      let loaded = 'yes';
+    it("reports off air when every deck empties", async () => {
+      let loaded = "yes";
       const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(
-          typeof input === 'string' ? input : input.toString(),
+          typeof input === "string" ? input : input.toString(),
         );
-        const script = url.searchParams.get('script') ?? '';
+        const script = url.searchParams.get("script") ?? "";
         const fields: Record<string, string> = {
-          get_clock: '1',
-          sandbox: 'no',
-          'deck 1 loaded': loaded,
-          'deck 1 is_audible': 'yes',
-          "deck 1 get_loaded_song 'title'": 'Strobe',
-          "deck 1 get_loaded_song 'artist'": 'deadmau5',
-          "deck 1 get_loaded_song 'album'": '',
-          "deck 1 get_loaded_song 'genre'": '',
-          "deck 1 get_loaded_song 'key'": '',
-          'deck 1 get_bpm absolute': '',
-          'deck 1 get_time total': '',
-          'deck 1 get_filepath': '/Music/Strobe.mp3',
+          get_clock: "1",
+          sandbox: "no",
+          "deck 1 loaded": loaded,
+          "deck 1 is_audible": "yes",
+          "deck 1 get_loaded_song 'title'": "Strobe",
+          "deck 1 get_loaded_song 'artist'": "deadmau5",
+          "deck 1 get_loaded_song 'album'": "",
+          "deck 1 get_loaded_song 'genre'": "",
+          "deck 1 get_loaded_song 'key'": "",
+          "deck 1 get_bpm absolute": "",
+          "deck 1 get_time total": "",
+          "deck 1 get_filepath": "/Music/Strobe.mp3",
         };
         const body = fields[script];
         if (body === undefined) {
-          return { ok: false, status: 500, text: async () => '' } as Response;
+          return { ok: false, status: 500, text: async () => "" } as Response;
         }
         return { ok: true, status: 200, text: async () => body } as Response;
       }) as unknown as typeof fetch;
@@ -561,13 +561,13 @@ describe('VirtualDjNetworkControl', () => {
         pollIntervalMs: 1000,
       });
       const onair = vi.fn();
-      control.on('onair', onair);
+      control.on("onair", onair);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
       expect(onair).toHaveBeenCalledExactlyOnceWith(true, 1);
 
-      loaded = 'no';
+      loaded = "no";
       await vi.advanceTimersByTimeAsync(1100);
 
       expect(onair).toHaveBeenCalledTimes(2);
@@ -575,35 +575,35 @@ describe('VirtualDjNetworkControl', () => {
     });
   });
 
-  describe('sandbox mode', () => {
+  describe("sandbox mode", () => {
     /**
      * Deck responses for a normal on-air read, so each sandbox test only has to
      * vary the `sandbox` answer.
      */
     const deckResponses: Record<string, string> = {
-      get_clock: '1',
-      'deck 1 loaded': 'yes',
-      'deck 1 is_audible': 'yes',
-      "deck 1 get_loaded_song 'title'": 'Strobe',
-      "deck 1 get_loaded_song 'artist'": 'deadmau5',
-      "deck 1 get_loaded_song 'album'": '',
-      "deck 1 get_loaded_song 'genre'": '',
-      "deck 1 get_loaded_song 'key'": '',
-      'deck 1 get_bpm absolute': '',
-      'deck 1 get_time total': '',
-      'deck 1 get_filepath': '/Music/Strobe.mp3',
+      get_clock: "1",
+      "deck 1 loaded": "yes",
+      "deck 1 is_audible": "yes",
+      "deck 1 get_loaded_song 'title'": "Strobe",
+      "deck 1 get_loaded_song 'artist'": "deadmau5",
+      "deck 1 get_loaded_song 'album'": "",
+      "deck 1 get_loaded_song 'genre'": "",
+      "deck 1 get_loaded_song 'key'": "",
+      "deck 1 get_bpm absolute": "",
+      "deck 1 get_time total": "",
+      "deck 1 get_filepath": "/Music/Strobe.mp3",
     };
 
-    it('emits no track and skips deck queries while sandbox is engaged', async () => {
+    it("emits no track and skips deck queries while sandbox is engaged", async () => {
       // In sandbox the rehearsal deck still answers `is_audible: yes` even
       // though it is routed to headphones only — publishing it would show the
       // audience a track they cannot hear.
-      const fetchFn = buildFetch({ ...deckResponses, sandbox: 'yes' });
+      const fetchFn = buildFetch({ ...deckResponses, sandbox: "yes" });
       control = new VirtualDjNetworkControl({ fetchFn, decks: [1] });
       const track = vi.fn();
       const sandbox = vi.fn();
-      control.on('track', track);
-      control.on('sandbox', sandbox);
+      control.on("track", track);
+      control.on("sandbox", sandbox);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
@@ -618,22 +618,22 @@ describe('VirtualDjNetworkControl', () => {
       const scripts = (
         fetchFn as unknown as ReturnType<typeof vi.fn>
       ).mock.calls.map((call) =>
-        new URL(String(call[0])).searchParams.get('script'),
+        new URL(String(call[0])).searchParams.get("script"),
       );
-      expect(new Set(scripts)).toEqual(new Set(['get_clock', 'sandbox']));
+      expect(new Set(scripts)).toEqual(new Set(["get_clock", "sandbox"]));
     });
 
-    it('announces sandbox state changes only on transitions', async () => {
-      let sandboxState = 'yes';
+    it("announces sandbox state changes only on transitions", async () => {
+      let sandboxState = "yes";
       const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(
-          typeof input === 'string' ? input : input.toString(),
+          typeof input === "string" ? input : input.toString(),
         );
-        const script = url.searchParams.get('script') ?? '';
+        const script = url.searchParams.get("script") ?? "";
         const body =
-          script === 'sandbox' ? sandboxState : deckResponses[script];
+          script === "sandbox" ? sandboxState : deckResponses[script];
         if (body === undefined)
-          return { ok: false, status: 500, text: async () => '' } as Response;
+          return { ok: false, status: 500, text: async () => "" } as Response;
         return { ok: true, status: 200, text: async () => body } as Response;
       }) as unknown as typeof fetch;
 
@@ -644,8 +644,8 @@ describe('VirtualDjNetworkControl', () => {
       });
       const sandbox = vi.fn();
       const track = vi.fn();
-      control.on('sandbox', sandbox);
-      control.on('track', track);
+      control.on("sandbox", sandbox);
+      control.on("track", track);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
@@ -654,7 +654,7 @@ describe('VirtualDjNetworkControl', () => {
       // Two polls inside sandbox, one announcement.
       expect(sandbox).toHaveBeenCalledExactlyOnceWith(true);
 
-      sandboxState = 'no';
+      sandboxState = "no";
       await vi.advanceTimersByTimeAsync(1100);
 
       expect(sandbox).toHaveBeenCalledTimes(2);
@@ -663,17 +663,17 @@ describe('VirtualDjNetworkControl', () => {
       expect(track).toHaveBeenCalledTimes(1);
     });
 
-    it('holds the on-air track across a sandbox session without re-emitting', async () => {
-      let sandboxState = 'no';
+    it("holds the on-air track across a sandbox session without re-emitting", async () => {
+      let sandboxState = "no";
       const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(
-          typeof input === 'string' ? input : input.toString(),
+          typeof input === "string" ? input : input.toString(),
         );
-        const script = url.searchParams.get('script') ?? '';
+        const script = url.searchParams.get("script") ?? "";
         const body =
-          script === 'sandbox' ? sandboxState : deckResponses[script];
+          script === "sandbox" ? sandboxState : deckResponses[script];
         if (body === undefined)
-          return { ok: false, status: 500, text: async () => '' } as Response;
+          return { ok: false, status: 500, text: async () => "" } as Response;
         return { ok: true, status: 200, text: async () => body } as Response;
       }) as unknown as typeof fetch;
 
@@ -683,28 +683,28 @@ describe('VirtualDjNetworkControl', () => {
         pollIntervalMs: 1000,
       });
       const track = vi.fn();
-      control.on('track', track);
+      control.on("track", track);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
       expect(track).toHaveBeenCalledTimes(1);
 
       // Sandbox comes and goes while the same song stays on the master.
-      sandboxState = 'yes';
+      sandboxState = "yes";
       await vi.advanceTimersByTimeAsync(1100);
-      sandboxState = 'no';
+      sandboxState = "no";
       await vi.advanceTimersByTimeAsync(1100);
 
       // Still one emission — the deduplication signature survived the bail-out.
       expect(track).toHaveBeenCalledTimes(1);
     });
 
-    it('stops querying sandbox on builds that reject the verb', async () => {
+    it("stops querying sandbox on builds that reject the verb", async () => {
       // Unknown verbs answer "error:-2147467259" (E_FAIL) with HTTP 200. That
       // must not be read as truthy, and must not be re-asked every second.
       const fetchFn = buildFetch({
         ...deckResponses,
-        sandbox: 'error:-2147467259',
+        sandbox: "error:-2147467259",
       });
       control = new VirtualDjNetworkControl({
         fetchFn,
@@ -712,7 +712,7 @@ describe('VirtualDjNetworkControl', () => {
         pollIntervalMs: 1000,
       });
       const track = vi.fn();
-      control.on('track', track);
+      control.on("track", track);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
@@ -725,27 +725,27 @@ describe('VirtualDjNetworkControl', () => {
         fetchFn as unknown as ReturnType<typeof vi.fn>
       ).mock.calls.filter(
         (call) =>
-          new URL(String(call[0])).searchParams.get('script') === 'sandbox',
+          new URL(String(call[0])).searchParams.get("script") === "sandbox",
       );
       expect(sandboxQueries).toHaveLength(1);
     });
 
-    it('keeps polling decks when the sandbox query fails at the transport level', async () => {
+    it("keeps polling decks when the sandbox query fails at the transport level", async () => {
       // A transient failure is not evidence of sandbox, and unlike an `error:-N`
       // response it must not disable detection permanently.
       let sandboxReachable = false;
       const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(
-          typeof input === 'string' ? input : input.toString(),
+          typeof input === "string" ? input : input.toString(),
         );
-        const script = url.searchParams.get('script') ?? '';
-        if (script === 'sandbox') {
-          if (!sandboxReachable) throw new Error('ECONNRESET');
-          return { ok: true, status: 200, text: async () => 'yes' } as Response;
+        const script = url.searchParams.get("script") ?? "";
+        if (script === "sandbox") {
+          if (!sandboxReachable) throw new Error("ECONNRESET");
+          return { ok: true, status: 200, text: async () => "yes" } as Response;
         }
         const body = deckResponses[script];
         if (body === undefined)
-          return { ok: false, status: 500, text: async () => '' } as Response;
+          return { ok: false, status: 500, text: async () => "" } as Response;
         return { ok: true, status: 200, text: async () => body } as Response;
       }) as unknown as typeof fetch;
 
@@ -756,8 +756,8 @@ describe('VirtualDjNetworkControl', () => {
       });
       const track = vi.fn();
       const sandbox = vi.fn();
-      control.on('track', track);
-      control.on('sandbox', sandbox);
+      control.on("track", track);
+      control.on("sandbox", sandbox);
 
       await control.start();
       await vi.runOnlyPendingTimersAsync();
@@ -773,24 +773,154 @@ describe('VirtualDjNetworkControl', () => {
     });
   });
 
-  it('sends bearer auth when configured', async () => {
+  it("sends bearer auth when configured", async () => {
     const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
-      const url = new URL(typeof input === 'string' ? input : input.toString());
-      expect(url.searchParams.get('bearer')).toBe('sekret');
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      expect(url.searchParams.get("bearer")).toBe("sekret");
       return {
         ok: true,
         status: 200,
-        text: async () => '1',
+        text: async () => "1",
       } as Response;
     }) as unknown as typeof fetch;
 
     control = new VirtualDjNetworkControl({
       fetchFn,
-      bearer: 'sekret',
+      bearer: "sekret",
       decks: [],
     });
 
     await control.start();
     expect(fetchFn).toHaveBeenCalled();
+  });
+});
+
+describe("NP3-400: deck 1 must not take the overlay mid-crossfade", () => {
+  /**
+   * Both decks audible at once is the normal state of a crossfade, and of
+   * deck 1 auto-loading its next playlist track while deck 2 still plays.
+   * Picking by array order handed the overlay to deck 1 every time, and
+   * suppressed deck 2's own track events for as long as it lasted — which is
+   * what the reporter saw as "deck 2 fails to load".
+   */
+  const deckScripts = (
+    deck: number,
+    opts: { audible: boolean; title: string },
+  ): Record<string, string> => ({
+    [`deck ${deck} loaded`]: "true",
+    [`deck ${deck} is_audible`]: opts.audible ? "true" : "false",
+    [`deck ${deck} get_loaded_song 'title'`]: opts.title,
+    [`deck ${deck} get_loaded_song 'artist'`]: "Artist",
+    [`deck ${deck} get_loaded_song 'album'`]: "",
+    [`deck ${deck} get_loaded_song 'genre'`]: "",
+    [`deck ${deck} get_loaded_song 'key'`]: "",
+    [`deck ${deck} get_bpm absolute`]: "128.00",
+    [`deck ${deck} get_time total`]: "05:00",
+    [`deck ${deck} get_filepath`]: `/music/${opts.title}.mp3`,
+  });
+
+  /** A fetch whose answers can be changed between polls. */
+  function mutableFetch(initial: Record<string, string>) {
+    const map = { ...initial };
+    const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      const script = url.searchParams.get("script") ?? "";
+      const body = map[script];
+      if (body === undefined) {
+        return {
+          ok: false,
+          status: 500,
+          text: async () => `unexpected script: ${script}`,
+        } as Response;
+      }
+      return { ok: true, status: 200, text: async () => body } as Response;
+    }) as unknown as typeof fetch;
+    return { fetchFn, map };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("leaves deck 2 on the overlay while deck 1 becomes audible under it", async () => {
+    const { fetchFn, map } = mutableFetch({
+      get_clock: "1",
+      ...deckScripts(1, { audible: false, title: "Deck One Song" }),
+      ...deckScripts(2, { audible: true, title: "Deck Two Song" }),
+    });
+
+    const control = new VirtualDjNetworkControl({ fetchFn, decks: [1, 2] });
+    const track = vi.fn();
+    control.on("track", track);
+
+    await control.start();
+    await vi.runOnlyPendingTimersAsync();
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track.mock.calls[0]![0]).toMatchObject({ deck: 2 });
+
+    // The DJ starts the crossfade: deck 1 is now audible too, deck 2 still is.
+    map["deck 1 is_audible"] = "true";
+    await vi.advanceTimersByTimeAsync(2000);
+
+    // Deck 2 is still what is being heard, so nothing new is announced.
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(control.onAirDeck).toBe(2);
+  });
+
+  it("hands over to deck 1 once deck 2 actually goes silent", async () => {
+    const { fetchFn, map } = mutableFetch({
+      get_clock: "1",
+      ...deckScripts(1, { audible: false, title: "Deck One Song" }),
+      ...deckScripts(2, { audible: true, title: "Deck Two Song" }),
+    });
+
+    const control = new VirtualDjNetworkControl({ fetchFn, decks: [1, 2] });
+    const track = vi.fn();
+    control.on("track", track);
+
+    await control.start();
+    await vi.runOnlyPendingTimersAsync();
+
+    map["deck 1 is_audible"] = "true";
+    await vi.advanceTimersByTimeAsync(2000);
+
+    // The transition completes: deck 2's fader is closed.
+    map["deck 2 is_audible"] = "false";
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(track).toHaveBeenCalledTimes(2);
+    expect(track.mock.calls[1]![0]).toMatchObject({ deck: 1 });
+    expect(control.onAirDeck).toBe(1);
+  });
+});
+
+describe("pickOnAirDeck preference", () => {
+  const snap = (deck: number, audible: boolean) => ({
+    deck,
+    loaded: true,
+    audible,
+    title: `T${deck}`,
+    artist: "",
+    album: "",
+    path: "",
+  });
+
+  it("keeps the preferred deck while several are audible", () => {
+    const picked = pickOnAirDeck([snap(1, true), snap(2, true)], 2);
+    expect(picked?.deck).toBe(2);
+  });
+
+  it("falls back to array order when the preferred deck is not audible", () => {
+    const picked = pickOnAirDeck([snap(1, true), snap(2, false)], 2);
+    expect(picked?.deck).toBe(1);
+  });
+
+  it("is unchanged when no preference is given", () => {
+    const picked = pickOnAirDeck([snap(1, true), snap(2, true)]);
+    expect(picked?.deck).toBe(1);
   });
 });

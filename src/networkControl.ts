@@ -6,15 +6,15 @@
  * Wiki: https://virtualdj.com/wiki/NetworkControlPlugin.html
  */
 
-import EventEmitter from 'node:events';
-import { type Logger, noopLogger } from './types/logger.js';
+import EventEmitter from "node:events";
+import { type Logger, noopLogger } from "./types/logger.js";
 import type {
   NetworkControlTypedEmitter,
   VirtualDjTrackPayload,
-} from './types.js';
+} from "./types.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 1000;
-const DEFAULT_HOST = '127.0.0.1';
+const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8080;
 const DEFAULT_DECKS = [1, 2, 3, 4] as const;
 
@@ -30,7 +30,7 @@ const DEFAULT_DECKS = [1, 2, 3, 4] as const;
  *
  * Reported by @m1ng.
  */
-const SANDBOX_QUERY = 'sandbox';
+const SANDBOX_QUERY = "sandbox";
 
 /**
  * Options for VirtualDjNetworkControl.
@@ -94,7 +94,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
 
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private isRunning = false;
-  private lastSignature = '';
+  private lastSignature = "";
   private sandboxActive = false;
   private sandboxQuerySupported = true;
   private lastOnAir: { active: boolean; deck: number } | null = null;
@@ -154,7 +154,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
       this.isRunning = false;
       const e = err instanceof Error ? err : new Error(String(err));
       this.emit(
-        'error',
+        "error",
         new Error(`Network Control handshake failed: ${e.message}`),
       );
       return;
@@ -163,7 +163,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
     this.logger.info(
       `Polling VirtualDJ Network Control at ${this.baseUrl} every ${this.pollIntervalMs}ms`,
     );
-    this.emit('ready', { basePath: this.baseUrl });
+    this.emit("ready", { basePath: this.baseUrl });
 
     // Run first poll immediately so we don't wait for the first interval.
     void this.poll();
@@ -179,7 +179,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
       this.pollTimer = null;
     }
     this.isRunning = false;
-    this.lastSignature = '';
+    this.lastSignature = "";
     this.sandboxActive = false;
     this.sandboxQuerySupported = true;
     this.lastOnAir = null;
@@ -201,12 +201,12 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
    * Public so callers can probe additional state (e.g. get_clock, automix).
    */
   async query(script: string): Promise<string> {
-    const url = new URL('/query', this.baseUrl);
-    url.searchParams.set('script', script);
-    if (this.bearer) url.searchParams.set('bearer', this.bearer);
+    const url = new URL("/query", this.baseUrl);
+    url.searchParams.set("script", script);
+    if (this.bearer) url.searchParams.set("bearer", this.bearer);
 
     const res = await this.fetchFn(url.toString(), {
-      method: 'GET',
+      method: "GET",
       headers: this.bearer ? { Authorization: `Bearer ${this.bearer}` } : {},
     });
     if (!res.ok) {
@@ -218,7 +218,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
   private async handshake(): Promise<void> {
     // `get_clock` is the wiki's canonical smoke-test query. If the plugin is
     // reachable and the bearer is correct, this returns a time value.
-    await this.query('get_clock');
+    await this.query("get_clock");
   }
 
   private async poll(): Promise<void> {
@@ -236,20 +236,22 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
         if (!this.sandboxActive) {
           this.sandboxActive = true;
           this.logger.info(
-            'VirtualDJ sandbox engaged — holding the last on-air track',
+            "VirtualDJ sandbox engaged — holding the last on-air track",
           );
-          this.emit('sandbox', true);
+          this.emit("sandbox", true);
         }
         return;
       }
       if (this.sandboxActive) {
         this.sandboxActive = false;
-        this.logger.info('VirtualDJ sandbox released — resuming deck polling');
-        this.emit('sandbox', false);
+        this.logger.info("VirtualDJ sandbox released — resuming deck polling");
+        this.emit("sandbox", false);
       }
 
       const snapshots = await this.readAllDecks();
-      const picked = pickOnAirDeck(snapshots);
+      // Keep the deck that is already on air while it stays audible, so a
+      // crossfade does not hand the overlay to whichever deck sorts first.
+      const picked = pickOnAirDeck(snapshots, this.onAirDeck || undefined);
       if (!picked) {
         // Nothing loaded anywhere, so nothing can be on air. The last `track`
         // still stands — an empty deck is not a new song.
@@ -265,14 +267,14 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
       const signature = `${picked.artist}|${picked.title}|${picked.path}`;
       if (signature !== this.lastSignature) {
         this.lastSignature = signature;
-        this.emit('track', this.buildPayload(picked));
+        this.emit("track", this.buildPayload(picked));
       }
 
       // Audibility changes underneath a song, so it gets its own event. Emitted
       // after `track` so a consumer always learns which song it refers to first.
       this.updateOnAir(picked.audible, picked.deck);
     } catch (err) {
-      this.emit('error', err instanceof Error ? err : new Error(String(err)));
+      this.emit("error", err instanceof Error ? err : new Error(String(err)));
     }
   }
 
@@ -289,7 +291,7 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
     if (!changed) return;
 
     this.lastOnAir = { active, deck };
-    this.emit('onair', active, deck);
+    this.emit("onair", active, deck);
   }
 
   /**
@@ -343,18 +345,18 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
           deck,
           loaded: false,
           audible: false,
-          title: '',
-          artist: '',
-          album: '',
-          genre: '',
-          key: '',
-          path: '',
+          title: "",
+          artist: "",
+          album: "",
+          genre: "",
+          key: "",
+          path: "",
         };
       }
 
       // Some VirtualDJ builds don't implement every VDJScript verb; swallow
       // per-field errors so one bad field doesn't void the whole deck read.
-      const safe = (s: string) => this.query(s).catch(() => '');
+      const safe = (s: string) => this.query(s).catch(() => "");
 
       const [
         audibleRaw,
@@ -404,13 +406,13 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
     const { isBeatportStream, beatportId } = detectBeatport(fileLocation);
 
     const filePath =
-      fileLocation && !fileLocation.startsWith('netsearch://')
+      fileLocation && !fileLocation.startsWith("netsearch://")
         ? fileLocation
         : undefined;
 
     return {
-      title: snapshot.title || 'Unknown Title',
-      artist: snapshot.artist || 'Unknown Artist',
+      title: snapshot.title || "Unknown Title",
+      artist: snapshot.artist || "Unknown Artist",
       album: snapshot.album || undefined,
       genre: snapshot.genre || undefined,
       key: snapshot.key || undefined,
@@ -429,10 +431,30 @@ export class VirtualDjNetworkControl extends (EventEmitter as new () => NetworkC
 /**
  * Prefer audible decks; fall back to any loaded deck so we still display
  * something in the overlay when the DJ pauses or loads a track silently.
+ *
+ * `preferDeck` breaks the tie while more than one deck is audible, which is
+ * the normal state of a crossfade and of deck 1 auto-loading its next playlist
+ * track while deck 2 still plays. Without it the first deck in array order won
+ * every time, so deck 1 took the overlay from a deck 2 that was still the one
+ * being heard — and deck 2's own track events were suppressed for as long as
+ * that lasted, which is what looked like "deck 2 fails to load" (NP3-400).
+ *
+ * The preference only holds while the preferred deck is still audible. Once it
+ * goes silent the tie is settled by array order again, so control passes on a
+ * completed transition without needing anything to reset it.
  */
-export function pickOnAirDeck(snapshots: DeckSnapshot[]): DeckSnapshot | null {
-  const audible = snapshots.find((s) => s.audible && s.loaded);
-  if (audible) return audible;
+export function pickOnAirDeck(
+  snapshots: DeckSnapshot[],
+  preferDeck?: number,
+): DeckSnapshot | null {
+  const audible = snapshots.filter((s) => s.audible && s.loaded);
+  if (audible.length > 0) {
+    const preferred =
+      preferDeck === undefined
+        ? undefined
+        : audible.find((s) => s.deck === preferDeck);
+    return preferred ?? audible[0];
+  }
   const anyLoaded = snapshots.find((s) => s.loaded);
   return anyLoaded ?? null;
 }
@@ -475,7 +497,7 @@ function parseDuration(raw: string): number | undefined {
     return Number.isFinite(n) && n > 0 ? n : undefined;
   }
 
-  const parts = trimmed.split(':').map((p) => Number(p));
+  const parts = trimmed.split(":").map((p) => Number(p));
   if (parts.some((p) => !Number.isFinite(p))) return undefined;
   if (parts.length === 2) return parts[0]! * 60 + parts[1]!;
   if (parts.length === 3) return parts[0]! * 3600 + parts[1]! * 60 + parts[2]!;
@@ -493,7 +515,7 @@ function parseDuration(raw: string): number | undefined {
  */
 function stripQuotes(raw: string): string {
   const trimmed = raw.trim();
-  if (isVdjError(trimmed)) return '';
+  if (isVdjError(trimmed)) return "";
   if (trimmed.length >= 2) {
     const first = trimmed[0];
     const last = trimmed[trimmed.length - 1];
