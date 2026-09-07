@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.2
+
+- fix: deck 1 no longer takes the overlay from deck 2 during a crossfade
+
+
 ## v1.2.1
 
 - ci: virtualdj-connect releases actually reach npm instead of being tagged and dropped
