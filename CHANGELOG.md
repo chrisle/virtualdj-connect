@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.3
+
+- ci: VirtualDJ connector CI comes from the shared connector-ci workflows
+
+
 ## v1.2.2
 
 - fix: deck 1 no longer takes the overlay from deck 2 during a crossfade
