@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.4
+
+- fix: a new VirtualDJ session no longer opens with the previous session's last track (NP3-409)
+
+
 ## v1.2.3
 
 - ci: VirtualDJ connector CI comes from the shared connector-ci workflows
