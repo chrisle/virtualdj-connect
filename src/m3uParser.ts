@@ -96,10 +96,11 @@ export class VirtualDjM3uParser {
       return date;
     };
 
+    // VirtualDJ writes <lastplaytime> as Unix seconds, not milliseconds.
     const parseTimestamp = (timestamp: string): Date | undefined => {
       if (!timestamp) return undefined;
-      const ms = parseInt(timestamp, 10);
-      return isNaN(ms) ? undefined : new Date(ms);
+      const seconds = parseInt(timestamp, 10);
+      return isNaN(seconds) ? undefined : new Date(seconds * 1000);
     };
 
     const tracks: VirtualDjTrack[] = [];

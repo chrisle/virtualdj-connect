@@ -145,12 +145,13 @@ export class VirtualDjConnect extends (EventEmitter as new () => TypedEmitter) {
 
     this.isRunning = true;
 
-    // Load initial track
+    // Seed the change cursor from whatever the history file already ends
+    // with, but do not emit it. That entry was played before monitoring began
+    // — typically the last song of a previous session, still sitting at the
+    // tail of today's M3U — and replaying it would open the new session with a
+    // track nobody is playing. Only entries appended from here on are tracks.
     const currentTrack = this.m3uParser.getLatestTrack();
-    if (currentTrack) {
-      this.lastTrackId = currentTrack.id;
-      this.emit('track', this.buildPayload(currentTrack));
-    }
+    this.lastTrackId = currentTrack?.id ?? '';
 
     // Start polling
     this.pollTimer = setInterval(() => this.poll(), this.pollIntervalMs);

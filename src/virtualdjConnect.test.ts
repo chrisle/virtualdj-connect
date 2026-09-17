@@ -97,29 +97,79 @@ describe('VirtualDjConnect', () => {
       expect(readyHandler).not.toHaveBeenCalled();
     });
 
-    it('emits initial track on start', () => {
+    // NP3-409: the history tail at start time was played before monitoring
+    // began (typically the previous session's last song). Replaying it opened
+    // every new session with a track nobody was playing.
+    it('does not replay the history tail that already existed on start', () => {
       mocks.mockM3uParser.getLatestTrack.mockReturnValue({
-        id: 'abc123',
-        title: 'Test',
-        artist: 'Artist',
-        fileLocation: '/path/to/track.mp3',
+        id: 'previous-session',
+        title: 'A Good Heart',
+        artist: 'Feargal Sharkey',
+        fileLocation: '/path/to/a-good-heart.mp3',
       });
 
-      connect = new VirtualDjConnect();
+      connect = new VirtualDjConnect({ pollIntervalMs: 5000 });
       const trackHandler = vi.fn();
       connect.on('track', trackHandler);
 
       connect.start();
+      vi.advanceTimersByTime(5000);
 
+      expect(trackHandler).not.toHaveBeenCalled();
+    });
+
+    it('emits the first entry appended after monitoring began', () => {
+      mocks.mockM3uParser.getLatestTrack
+        .mockReturnValueOnce({
+          id: 'previous-session',
+          title: 'A Good Heart',
+          artist: 'Feargal Sharkey',
+          fileLocation: '/path/to/a-good-heart.mp3',
+        })
+        .mockReturnValue({
+          id: 'new-session',
+          title: 'Spooky Scary Skeletons',
+          artist: 'Cahill',
+          fileLocation: '/path/to/spooky.mp3',
+        });
+
+      connect = new VirtualDjConnect({ pollIntervalMs: 5000 });
+      const trackHandler = vi.fn();
+      connect.on('track', trackHandler);
+
+      connect.start();
+      vi.advanceTimersByTime(5000);
+
+      expect(trackHandler).toHaveBeenCalledTimes(1);
       expect(trackHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Test',
-          artist: 'Artist',
-          fileLocation: '/path/to/track.mp3',
-          filePath: '/path/to/track.mp3',
+          title: 'Spooky Scary Skeletons',
+          artist: 'Cahill',
+          fileLocation: '/path/to/spooky.mp3',
+          filePath: '/path/to/spooky.mp3',
           isBeatportStream: false,
         })
       );
+    });
+
+    it('re-seeds the cursor on restart so the tail is not replayed then either', () => {
+      mocks.mockM3uParser.getLatestTrack.mockReturnValue({
+        id: 'previous-session',
+        title: 'A Good Heart',
+        artist: 'Feargal Sharkey',
+        fileLocation: '/path/to/a-good-heart.mp3',
+      });
+
+      connect = new VirtualDjConnect({ pollIntervalMs: 5000 });
+      const trackHandler = vi.fn();
+      connect.on('track', trackHandler);
+
+      connect.start();
+      connect.stop();
+      connect.start();
+      vi.advanceTimersByTime(5000);
+
+      expect(trackHandler).not.toHaveBeenCalled();
     });
   });
 
@@ -155,13 +205,12 @@ describe('VirtualDjConnect', () => {
 
       connect.start();
 
-      // Initial track emitted on start
-      expect(trackHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'First', artist: 'Artist1' })
-      );
+      // The entry present at start seeds the cursor and is not emitted.
+      expect(trackHandler).not.toHaveBeenCalled();
 
       vi.advanceTimersByTime(5000);
 
+      expect(trackHandler).toHaveBeenCalledTimes(1);
       expect(trackHandler).toHaveBeenCalledWith(
         expect.objectContaining({ title: 'Second', artist: 'Artist2' })
       );
@@ -180,12 +229,10 @@ describe('VirtualDjConnect', () => {
       connect.on('track', trackHandler);
 
       connect.start();
-      expect(trackHandler).toHaveBeenCalledTimes(1);
-
       vi.advanceTimersByTime(5000);
       vi.advanceTimersByTime(5000);
 
-      expect(trackHandler).toHaveBeenCalledTimes(1);
+      expect(trackHandler).not.toHaveBeenCalled();
     });
 
     it('handles null getLatestTrack result', () => {

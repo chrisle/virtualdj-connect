@@ -138,9 +138,9 @@ describe('VirtualDjM3uParser', () => {
         '2024-01-02.m3u',
       ] as any);
       mockReadFileSync.mockReturnValue(`#EXTM3U
-#EXTVDJ:<time>14:30</time><lastplaytime>1704196200000</lastplaytime><artist>Daft Punk</artist><title>Around The World</title><remix>Club Mix</remix>
+#EXTVDJ:<time>14:30</time><lastplaytime>1704196200</lastplaytime><artist>Daft Punk</artist><title>Around The World</title><remix>Club Mix</remix>
 /path/to/track1.mp3
-#EXTVDJ:<time>15:00</time><lastplaytime>1704198000000</lastplaytime><artist>Deadmau5</artist><title>Strobe</title>
+#EXTVDJ:<time>15:00</time><lastplaytime>1704198000</lastplaytime><artist>Deadmau5</artist><title>Strobe</title>
 /path/to/track2.mp3
 `);
 
@@ -157,7 +157,7 @@ describe('VirtualDjM3uParser', () => {
       mockExistsSync.mockReturnValue(true);
       mockReaddirSync.mockReturnValue(['2024-01-01.m3u'] as any);
       mockReadFileSync.mockReturnValue(`#EXTM3U
-#EXTVDJ:<time>14:30</time><lastplaytime>1704196200000</lastplaytime><artist>Test Artist</artist><title>Test Title</title><remix>Test Remix</remix>
+#EXTVDJ:<time>14:30</time><lastplaytime>1704196200</lastplaytime><artist>Test Artist</artist><title>Test Title</title><remix>Test Remix</remix>
 /path/to/track.mp3
 `);
 
@@ -169,7 +169,8 @@ describe('VirtualDjM3uParser', () => {
       expect(track?.remix).toBe('Test Remix');
       expect(track?.id).toBeDefined();
       expect(track?.time).toBeInstanceOf(Date);
-      expect(track?.lastPlayTime).toBeInstanceOf(Date);
+      // VirtualDJ writes <lastplaytime> in Unix seconds.
+      expect(track?.lastPlayTime).toEqual(new Date(1704196200 * 1000));
     });
 
     it('handles missing optional metadata', () => {
